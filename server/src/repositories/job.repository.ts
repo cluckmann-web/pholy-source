@@ -180,14 +180,22 @@ export class JobRepository {
     return this.getQueue(name).clean(0, 1000, type);
   }
 
-  getJobCounts(name: QueueName): Promise<JobCounts> {
-    return this.getQueue(name).getJobCounts(
+  async getJobCounts(name: QueueName): Promise<JobCounts> {
+    const counts = await this.getQueue(name).getJobCounts(
       'active',
       'completed',
       'failed',
       'delayed',
       'waiting',
-    ) as unknown as Promise<JobCounts>;
+      'prioritized',
+    );
+    return {
+      active: counts.active ?? 0,
+      completed: counts.completed ?? 0,
+      failed: counts.failed ?? 0,
+      delayed: counts.delayed ?? 0,
+      waiting: (counts.waiting ?? 0) + (counts.prioritized ?? 0),
+    };
   }
 
   private getQueueName(name: JobName) {
@@ -200,18 +208,18 @@ export class JobRepository {
     }
 
     const promises = [];
-    const itemsByQueue = {} as Record<string, (JobItem & { data: any; options: JobsOptions | undefined })[]>;
+    const itemsByQueue = {} as Record<string, (JobItem & { data: any; opts: JobsOptions })[]>;
     for (const item of items) {
       const queueName = this.getQueueName(item.name);
       const job = {
         name: item.name,
         data: item.data || {},
-        options: this.getJobOptions(item) || undefined,
-      } as JobItem & { data: any; options: JobsOptions | undefined };
+        opts: { ...this.getJobPriority(item, queueName), ...this.getJobOptions(item) },
+      } as JobItem & { data: any; opts: JobsOptions };
 
-      if (job.options?.jobId || job.options?.deduplication) {
+      if (job.opts.jobId || job.opts.deduplication) {
         // need to use add() instead of addBulk() for jobId/deduplication to take effect
-        promises.push(this.getQueue(queueName).add(item.name, item.data, job.options));
+        promises.push(this.getQueue(queueName).add(item.name, item.data, job.opts));
       } else {
         itemsByQueue[queueName] ||= [];
         itemsByQueue[queueName].push(job);
@@ -251,11 +259,33 @@ export class JobRepository {
       items.add(QueueJobStatus.Waiting);
     }
 
-    const jobs = await this.getQueue(name).getJobs([...items] as JobType[], 0, 1000);
+    const states: JobType[] = [...items] as JobType[];
+    if (items.has(QueueJobStatus.Waiting)) {
+      states.push('prioritized');
+    }
+    const jobs = await this.getQueue(name).getJobs(states, 0, 1000);
     return jobs.map((job) => {
       const { id, name, timestamp, data } = job;
       return { id, name: name as JobName, timestamp, data };
     });
+  }
+
+  private getJobPriority(item: JobItem, queue: QueueName): JobsOptions {
+    // Every job in these queues needs an explicit priority: BullMQ processes
+    // unprioritized jobs before priority 1. Fresh uploads should reach their
+    // first preview ahead of queued library scans, without interrupting work.
+    if (
+      [
+        QueueName.Sidecar,
+        QueueName.MetadataExtraction,
+        QueueName.StorageTemplateMigration,
+        QueueName.ThumbnailGeneration,
+      ].includes(queue)
+    ) {
+      const source = item.data && 'source' in item.data ? item.data.source : undefined;
+      return { priority: source === 'upload' ? 1 : 10 };
+    }
+    return {};
   }
 
   private getJobOptions(item: JobItem): JobsOptions | null {

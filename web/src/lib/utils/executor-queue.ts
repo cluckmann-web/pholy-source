@@ -1,73 +1,83 @@
-import { handlePromiseError } from '#lib/utils.ts';
-
 interface Options {
   concurrency: number;
 }
 
-type Runnable = () => Promise<unknown>;
+type Task = { run: () => Promise<void>; cancel: () => void };
 
+/** A bounded, pausable queue. Cancelling a waiting task always settles its promise. */
 export class ExecutorQueue {
-  private queue: Array<Runnable> = [];
+  private queue: Task[] = [];
   private running = 0;
   private _concurrency: number;
+  private paused = false;
 
   constructor(options?: Options) {
-    this._concurrency = options?.concurrency || 2;
+    this._concurrency = Math.min(6, Math.max(1, Math.floor(options?.concurrency || 2)));
   }
 
   get concurrency() {
     return this._concurrency;
   }
 
-  set concurrency(concurrency: number) {
-    if (concurrency < 1) {
+  set concurrency(value: number) {
+    if (!Number.isFinite(value)) {
       return;
     }
-
-    this._concurrency = concurrency;
-
-    const v = concurrency - this.running;
-    if (v > 0) {
-      for (let i = 0; i < v; i++) {
-        this.tryRun();
-      }
-    }
+    this._concurrency = Math.min(6, Math.max(1, Math.floor(value)));
+    this.tryRun();
   }
 
-  addTask<T>(task: () => Promise<T>): Promise<T> {
+  pause() {
+    this.paused = true;
+  }
+
+  resume() {
+    this.paused = false;
+    this.tryRun();
+  }
+
+  addTask<T>(task: () => Promise<T>, options: { signal?: AbortSignal } = {}): Promise<T> {
+    const { signal } = options;
     return new Promise((resolve, reject) => {
-      // Add a custom task that wrap the original one;
-      this.queue.push(async () => {
-        try {
+      if (signal?.aborted) {
+        reject(new DOMException('Cancelled', 'AbortError'));
+        return;
+      }
+      const entry: Task = {
+        cancel: () => {
+          const index = this.queue.indexOf(entry);
+          if (index !== -1) {
+            this.queue.splice(index, 1);
+            signal?.removeEventListener('abort', entry.cancel);
+            reject(new DOMException('Cancelled', 'AbortError'));
+          }
+        },
+        run: async () => {
+          signal?.removeEventListener('abort', entry.cancel);
           this.running++;
-          const result = task();
-          resolve(await result);
-        } catch (error) {
-          reject(error);
-        } finally {
-          this.taskFinished();
-        }
-      });
-      // Then run it if possible !
+          try {
+            resolve(await task());
+          } catch (error) {
+            reject(error);
+          } finally {
+            this.running--;
+            this.tryRun();
+          }
+        },
+      };
+      signal?.addEventListener('abort', entry.cancel, { once: true });
+      this.queue.push(entry);
       this.tryRun();
     });
   }
 
-  private taskFinished(): void {
-    this.running--;
-    this.tryRun();
-  }
-
   private tryRun() {
-    if (this.running >= this.concurrency) {
-      return;
+    while (!this.paused && this.running < this.concurrency) {
+      const task = this.queue.shift();
+      if (!task) {
+        return;
+      }
+      void task.run();
     }
-
-    const runnable = this.queue.shift();
-    if (!runnable) {
-      return;
-    }
-
-    handlePromiseError(runnable());
   }
 }

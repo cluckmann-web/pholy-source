@@ -39,6 +39,12 @@ import { page } from '$app/state';
 export const getPagesProvider = ($t: MessageFormatter) => {
   const adminPages: ActionItem[] = [
     {
+      title: $t('pholy_admin_title'),
+      description: $t('pholy_admin_description'),
+      icon: mdiServer,
+      onAction: () => goto(Route.admin()),
+    },
+    {
       title: $t('admin.user_management'),
       description: $t('admin.users_page_description'),
       icon: mdiAccountMultipleOutline,

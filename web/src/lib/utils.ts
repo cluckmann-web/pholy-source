@@ -59,8 +59,11 @@ export const initLanguage = async () => {
 
 interface UploadRequestOptions {
   url: string;
-  method?: 'POST' | 'PUT';
-  data: FormData;
+  method?: 'POST' | 'PUT' | 'PATCH';
+  data: FormData | Blob;
+  signal?: AbortSignal;
+  headers?: Record<string, string>;
+  timeout?: number;
   onUploadProgress?: (event: ProgressEvent<XMLHttpRequestEventTarget>) => void;
 }
 
@@ -102,18 +105,36 @@ export const cancelUploadRequests = () => {
 };
 
 export const uploadRequest = async <T>(options: UploadRequestOptions): Promise<{ data: T; status: number }> => {
-  const { onUploadProgress: onProgress, data, url } = options;
+  const { onUploadProgress: onProgress, data, url, signal } = options;
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new AbortError());
+      return;
+    }
     const xhr = new XMLHttpRequest();
     const unsubscribe = trackUpload(() => xhr.abort());
-
-    xhr.addEventListener('error', (error) => {
+    const abort = () => xhr.abort();
+    const cleanup = () => {
       unsubscribe();
-      reject(error);
+      signal?.removeEventListener('abort', abort);
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+
+    xhr.addEventListener('error', () => {
+      cleanup();
+      reject(new ApiError('Network error', 0, ''));
+    });
+    xhr.addEventListener('timeout', () => {
+      cleanup();
+      reject(new ApiError('Upload timed out', 408, ''));
+    });
+    xhr.addEventListener('abort', () => {
+      cleanup();
+      reject(new AbortError());
     });
 
     xhr.addEventListener('load', () => {
-      unsubscribe();
+      cleanup();
       if (xhr.readyState === 4 && xhr.status >= 200 && xhr.status < 300) {
         resolve({ data: xhr.response as T, status: xhr.status });
       } else {
@@ -127,6 +148,10 @@ export const uploadRequest = async <T>(options: UploadRequestOptions): Promise<{
 
     xhr.open(options.method || 'POST', url);
     xhr.responseType = 'json';
+    xhr.timeout = options.timeout ?? 120_000;
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      xhr.setRequestHeader(name, value);
+    }
     xhr.send(data);
   });
 };

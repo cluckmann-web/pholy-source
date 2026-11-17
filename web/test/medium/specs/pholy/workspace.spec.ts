@@ -39,7 +39,7 @@ const seedWorkspace = (data: MockData) => {
 const openSidebar = async (page: Page) => {
   const sidebar = page.getByRole('navigation', { name: 'Primär', exact: true });
   const menu = page.getByRole('button', { name: 'Hauptmenü', exact: true });
-  if ((page.viewportSize()?.width ?? 1440) < 640) {
+  if ((page.viewportSize()?.width ?? 1440) < 850) {
     await expect(menu).toBeVisible();
     if ((await page.locator('#sidebar').getAttribute('data-visible')) !== 'true') {
       await menu.click();
@@ -206,6 +206,56 @@ for (const viewport of viewports) {
     });
   });
 }
+
+test('wide and tablet workspaces remain readable in light and dark themes', async ({ page, data, app }, testInfo) => {
+  const { assets } = seedWorkspace(data);
+  await page.setViewportSize({ width: 2560, height: 1440 });
+  await page.goto(Route.photos());
+  await expect(app.timeline.thumbnail(assets[0])).toBeVisible();
+  await expect(page.getByRole('main')).toHaveCSS('font-family', /PHOLY Inter/);
+  await page.evaluate(() => document.fonts.ready);
+
+  try {
+    for (const dark of [false, true]) {
+      await page.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), dark);
+      for (const viewport of [
+        { name: 'wide', width: 2560, height: 1440 },
+        { name: 'tablet', width: 768, height: 1024 },
+      ]) {
+        await page.setViewportSize(viewport);
+        await expect(app.timeline.thumbnail(assets[0])).toBeVisible();
+        await expectNoHorizontalOverflow(page);
+        const main = page.getByRole('main');
+        await expect(main).toBeInViewport({ ratio: 1 });
+        if (viewport.name === 'wide') {
+          // A gallery should not stretch its controls across an entire ultra-wide monitor.
+          const getContentWidth = async () => {
+            const box = await main.boundingBox();
+            return box?.width ?? 0;
+          };
+          await expect.poll(getContentWidth).toBeLessThan(1800);
+          await expect.poll(getContentWidth).toBeGreaterThan(1200);
+        }
+        await capture(page, testInfo, `${viewport.name}-${dark ? 'dark' : 'light'}`);
+
+        const sidebar = await openSidebar(page);
+        await expect(sidebar.getByRole('link', { name: 'Meine Fotos', exact: true })).toHaveAttribute(
+          'aria-current',
+          'page',
+        );
+        await expect(sidebar.getByRole('heading', { name: 'Mediathek', exact: true })).toBeVisible();
+        if (viewport.name !== 'tablet') {
+          continue;
+        }
+        await page.keyboard.press('Escape');
+        await expect(sidebar).toHaveAttribute('data-visible', 'false');
+        await expect(page.getByRole('button', { name: 'Hauptmenü', exact: true })).toBeFocused();
+      }
+    }
+  } finally {
+    await page.evaluate(() => document.documentElement.classList.remove('dark'));
+  }
+});
 
 test.describe('PHOLY public metadata', () => {
   for (const { name, showMetadata, allowDownload } of [

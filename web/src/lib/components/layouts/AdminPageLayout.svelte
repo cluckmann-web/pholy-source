@@ -8,7 +8,15 @@
   import type { HeaderButtonActionItem } from '#lib/types.ts';
   import { ImmichBackupsAdminNavButton } from '@futo-org/backups-orchestrator-ui';
   import { AppShell, AppShellHeader, AppShellSidebar, MenuItemType, NavbarItem, type BreadcrumbItem } from '@immich/ui';
-  import { mdiAccountMultipleOutline, mdiBookshelf, mdiCog, mdiServer, mdiTrayFull, mdiWrench } from '@mdi/js';
+  import {
+    mdiAccountMultipleOutline,
+    mdiBookshelf,
+    mdiCog,
+    mdiServer,
+    mdiTrayFull,
+    mdiViewDashboardOutline,
+    mdiWrench,
+  } from '@mdi/js';
   import type { Snippet } from 'svelte';
   import { t } from 'svelte-i18n';
 
@@ -21,15 +29,16 @@
   let { breadcrumbs, actions, children }: Props = $props();
 </script>
 
-<AppShell>
+<AppShell class="pholy-admin-shell">
   <AppShellHeader>
     <NavigationBar noBorder />
   </AppShellHeader>
   <AppShellSidebar
     bind:open={sidebarStore.isOpen}
-    class="flex h-full flex-col justify-between gap-2 border-none shadow-none"
+    class="pholy-admin-sidebar flex h-full flex-col justify-between gap-2 border-none shadow-none"
   >
     <div class="flex flex-col gap-1 pe-4 pt-8">
+      <NavbarItem title={$t('pholy_admin_title')} href={Route.admin()} icon={mdiViewDashboardOutline} />
       {#if featureFlagsManager.value.backups}
         <ImmichBackupsAdminNavButton href={Route.backups()} />
       {/if}

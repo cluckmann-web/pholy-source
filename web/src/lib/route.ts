@@ -40,6 +40,7 @@ export const Route = {
   imprint: () => '/impressum',
   privacy: () => '/datenschutz',
   terms: () => '/agb',
+  admin: () => '/admin',
   invitations: () => '/admin/invitations',
   source: () => '/source/',
   // auth

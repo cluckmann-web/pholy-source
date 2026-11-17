@@ -36,6 +36,7 @@ import { PasskeyRepository } from 'src/repositories/passkey.repository.js';
 import { PersonUserRepository } from 'src/repositories/person-user.repository.js';
 import { PersonRepository } from 'src/repositories/person.repository.js';
 import { PholyInvitationRepository } from 'src/repositories/pholy-invitation.repository.js';
+import { PholyUploadRepository } from 'src/repositories/pholy-upload.repository.js';
 import { PluginRepository } from 'src/repositories/plugin.repository.js';
 import { ProcessRepository } from 'src/repositories/process.repository.js';
 import { SearchRepository } from 'src/repositories/search.repository.js';
@@ -61,6 +62,7 @@ import { WorkflowRepository } from 'src/repositories/workflow.repository.js';
 
 export const repositories = [
   PholyInvitationRepository,
+  PholyUploadRepository,
   AccessRepository,
   ActivityRepository,
   AlbumRepository,

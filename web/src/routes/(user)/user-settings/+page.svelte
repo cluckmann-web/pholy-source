@@ -1,5 +1,6 @@
 <script lang="ts">
   import UserPageLayout from '#lib/components/layouts/UserPageLayout.svelte';
+  import GettingStarted from '#lib/components/pholy/GettingStarted.svelte';
   import UserAvatar from '#lib/components/shared-components/UserAvatar.svelte';
   import { authManager } from '#lib/managers/auth-manager.svelte.ts';
   import AvatarEditModal from '#lib/modals/AvatarEditModal.svelte';
@@ -43,6 +44,7 @@
       </div>
     </section>
 
+    <GettingStarted settings />
     <UserSettingsList />
   </div>
 </UserPageLayout>

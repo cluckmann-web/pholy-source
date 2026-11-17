@@ -5,6 +5,17 @@
       "enabled": false
     }
   },
+  "job": {
+    "thumbnailGeneration": { "concurrency": 3 },
+    "metadataExtraction": { "concurrency": 3 },
+    "videoConversion": { "concurrency": 1 },
+    "faceDetection": { "concurrency": 1 },
+    "smartSearch": { "concurrency": 1 },
+    "ocr": { "concurrency": 1 }
+  },
+  "ffmpeg": {
+    "threads": 2
+  },
   "machineLearning": {
     "enabled": true,
     "urls": [

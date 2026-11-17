@@ -2,6 +2,7 @@
   import ActionMenuItem from '#lib/components/ActionMenuItem.svelte';
   import UserPageLayout from '#lib/components/layouts/UserPageLayout.svelte';
   import MemoryCard from '#lib/components/memories/MemoryCard.svelte';
+  import GettingStarted from '#lib/components/pholy/GettingStarted.svelte';
   import EmptyPlaceholder from '#lib/components/shared-components/EmptyPlaceholder.svelte';
   import ButtonContextMenu from '#lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import AssetSelectControlBar from '#lib/components/timeline/AssetSelectControlBar.svelte';
@@ -105,6 +106,7 @@
     onEscape={handleEscape}
     withStacked
   >
+    {#if !assetMultiSelectManager.selectionActive}<GettingStarted />{/if}
     <div class="pholy-photo-tools">
       <nav class="pholy-photo-tabs" aria-label={$t('photos')}>
         <a href={Route.photos()} aria-current="page">{pholyCopy.allPhotos}</a>

@@ -72,12 +72,16 @@
 </nav>
 
 <style>
+  .pholy-sidebar {
+    background: var(--pholy-canvas);
+  }
+
   .pholy-sidebar[data-visible='true'] {
     border-inline-end: 1px solid var(--immich-ui-default-border);
   }
 
   .pholy-sidebar-content {
-    padding: 1.1rem 0.75rem max(1rem, env(safe-area-inset-bottom));
+    padding: 1.25rem 0.75rem max(1rem, env(safe-area-inset-bottom));
   }
 
   .pholy-sidebar-header {
@@ -93,19 +97,57 @@
   }
 
   .pholy-sidebar :global(a.pholy-nav-item) {
-    min-height: 3rem;
+    min-height: 2.75rem;
     border: 0;
     border-radius: var(--pholy-surface-radius);
-    padding-block: 0.625rem;
-    padding-inline: 1.25rem 0.75rem;
+    padding-block: 0.5rem;
+    padding-inline: 1rem 0.75rem;
+    color: var(--immich-ui-dark);
+    font-size: 0.8125rem;
+    font-weight: 450;
     transition:
       background-color 150ms ease,
       color 150ms ease;
   }
 
   .pholy-sidebar :global(a.pholy-nav-item[aria-current='page']) {
-    background: color-mix(in srgb, var(--immich-ui-primary-500) 10%, var(--immich-ui-light));
+    background: color-mix(in srgb, var(--immich-ui-primary-500) 9%, var(--pholy-canvas));
+    color: var(--immich-ui-primary-600);
+    font-weight: 600;
     box-shadow: inset 3px 0 0 var(--immich-ui-primary-500);
+  }
+
+  .pholy-sidebar :global(a.pholy-nav-item:hover) {
+    background: color-mix(in srgb, var(--immich-ui-primary-500) 6%, var(--pholy-canvas));
+  }
+
+  .pholy-sidebar :global(a.pholy-nav-item svg) {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .pholy-sidebar :global(a.pholy-nav-item .truncate) {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  .pholy-sidebar :global(.pholy-nav-group-title) {
+    padding: 1.125rem 1rem 0.375rem;
+    color: var(--immich-ui-muted);
+    font-size: 0.625rem;
+    font-weight: 650;
+    line-height: 1.5;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .pholy-sidebar :global(.pholy-nav-group-title:first-child) {
+    padding-top: 0;
+  }
+
+  .pholy-sidebar :global(.pholy-sidebar-footer) {
+    border-top: 1px solid var(--immich-ui-default-border);
+    margin-top: 1.25rem;
   }
 
   .pholy-sidebar :global(a.pholy-nav-item:focus-visible) {

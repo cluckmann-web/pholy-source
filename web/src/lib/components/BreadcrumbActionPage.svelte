@@ -30,8 +30,8 @@
   );
 </script>
 
-<div class="flex h-full flex-col">
-  <div class="flex h-16 w-full items-center justify-between border-b px-4 py-2 md:px-2">
+<div class="pholy-admin-page flex h-full min-w-0 flex-col">
+  <div class="pholy-admin-header flex w-full items-center justify-between border-b">
     <Breadcrumbs items={breadcrumbs} separator={mdiSlashForward} />
 
     {#if enabledActions.length > 0}
@@ -56,6 +56,6 @@
     {/if}
   </div>
   <Scrollable class="grow">
-    <Container class="p-2 pb-16" {children} />
+    <Container class="pholy-admin-content" {children} />
   </Scrollable>
 </div>

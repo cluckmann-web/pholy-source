@@ -46,6 +46,7 @@
 </script>
 
 <Sidebar ariaLabel={$t('primary')}>
+  <h2 class="pholy-nav-group-title">{copy.library}</h2>
   <NavbarItem
     title={photosTitle}
     href={Route.photos()}
@@ -95,6 +96,8 @@
     />
   {/if}
 
+  <h2 class="pholy-nav-group-title">{copy.sharing}</h2>
+
   <NavbarItem
     title={$t('sharing')}
     href={Route.sharing()}
@@ -106,6 +109,8 @@
   {#if authManager.preferences.sharedLinks.enabled && authManager.preferences.sharedLinks.sidebarWeb}
     <NavbarItem title={$t('shared_links')} href={Route.sharedLinks()} icon={mdiLink} class="pholy-nav-item" />
   {/if}
+
+  <h2 class="pholy-nav-group-title">{copy.organize}</h2>
 
   {#if authManager.preferences.tags.enabled && authManager.preferences.tags.sidebarWeb}
     <NavbarItem
@@ -168,6 +173,8 @@
     />
   {/if}
 
+  <h2 class="pholy-nav-group-title">{copy.account}</h2>
+
   <NavbarItem
     title={copy.profile}
     href={Route.userSettings()}
@@ -176,7 +183,7 @@
     class="pholy-nav-item"
   />
 
-  <div class="mt-auto pt-5">
+  <div class="pholy-sidebar-footer mt-auto pt-5">
     <BottomInfo />
   </div>
 </Sidebar>

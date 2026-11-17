@@ -30,6 +30,7 @@ import { PartnerService } from 'src/services/partner.service.js';
 import { PasskeyService } from 'src/services/passkey.service.js';
 import { PersonService } from 'src/services/person.service.js';
 import { PholyInvitationService } from 'src/services/pholy-invitation.service.js';
+import { PholyUploadService } from 'src/services/pholy-upload.service.js';
 import { PluginService } from 'src/services/plugin.service.js';
 import { QueueService } from 'src/services/queue.service.js';
 import { SearchService } from 'src/services/search.service.js';
@@ -57,6 +58,7 @@ import { WorkflowService } from 'src/services/workflow.service.js';
 
 export const services = [
   PholyInvitationService,
+  PholyUploadService,
   ApiKeyService,
   ActivityService,
   AlbumService,

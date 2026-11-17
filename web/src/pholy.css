@@ -2,28 +2,33 @@
   :root,
   .light {
     --pholy-surface-radius: 0px;
-    --immich-ui-primary-50: #f0f8f6;
-    --immich-ui-primary-100: #dceee9;
-    --immich-ui-primary-200: #bdddd5;
-    --immich-ui-primary-300: #92c5ba;
-    --immich-ui-primary-400: #56a394;
-    --immich-ui-primary-500: #216c63;
-    --immich-ui-primary-600: #1c5b54;
-    --immich-ui-primary-700: #194b47;
-    --immich-ui-primary-800: #163d3c;
-    --immich-ui-primary-900: #102f33;
-    --immich-ui-primary-950: #0c2427;
-    --immich-ui-light: #fbfcfd;
-    --immich-ui-dark: #18383c;
-    --immich-ui-muted: #657a7c;
-    --immich-ui-gray: #f1f5f4;
-    --immich-ui-default-border: #dce6e3;
-    --immich-primary: 33 108 99;
-    --immich-bg: 251 252 253;
-    --immich-fg: 24 56 60;
+    --pholy-canvas: #f7f7f2;
+    --pholy-content-max: 1680px;
+    --pholy-content-inset: clamp(20px, 2vw, 32px);
+    --immich-ui-primary-50: #edf1e9;
+    --immich-ui-primary-100: #dce6dc;
+    --immich-ui-primary-200: #bbd3c5;
+    --immich-ui-primary-300: #8cb59e;
+    --immich-ui-primary-400: #50886c;
+    --immich-ui-primary-500: #143e35;
+    --immich-ui-primary-600: #10372e;
+    --immich-ui-primary-700: #0e3028;
+    --immich-ui-primary-800: #0d2923;
+    --immich-ui-primary-900: #0b221d;
+    --immich-ui-primary-950: #071a16;
+    --immich-ui-light: #ffffff;
+    --immich-ui-dark: #1f332b;
+    --immich-ui-muted: #637168;
+    --immich-ui-gray: #edf0e8;
+    --immich-ui-default-border: #d8ded4;
+    --immich-primary: 20 62 53;
+    --immich-bg: 247 247 242;
+    --immich-fg: 31 51 43;
+    --immich-gray: 237 240 232;
   }
 
   .dark {
+    --pholy-canvas: #101b17;
     --immich-ui-primary-50: #102e30;
     --immich-ui-primary-100: #173d3e;
     --immich-ui-primary-200: #21514e;
@@ -47,16 +52,16 @@
   }
 }
 
-/* Round button variants also use square corners; avatars and status dots keep their shape. */
+/* Shell controls are square; media controls, avatars and status dots retain their shapes.
+   Other cards, fields and dialogs use the shared Tailwind radius tokens in app.css. */
+:is(.pholy-navbar, .pholy-page-header, .pholy-admin-header, .pholy-sidebar, .pholy-admin-sidebar)
+  :is(button, [role='button'], [role='tab']),
+[role='dialog'] :is(button, [role='button']),
 :where(
-  button,
-  a,
-  [role='button'],
-  input:not([type='radio']):not([type='range']),
+  input:not([type='radio']):not([type='range']):not([type='color']),
   select,
   textarea,
   [role='tab'],
-  [role='group'],
   [role='menu'],
   [role='listbox'],
   [role='dialog']
@@ -93,9 +98,44 @@
   box-shadow: 0 20px 64px #00000030;
 }
 
-/* PHOLY workspace: the existing routes and media layout stay responsible for sizing. */
+/* Shared shell and readable content width. Timeline and map children continue to
+   measure their own containers; the full-screen asset viewer is outside this shell. */
 .pholy-navbar {
+  background: var(--pholy-canvas);
+}
+
+.pholy-navbar-grid {
+  border-color: var(--immich-ui-default-border);
+}
+
+.pholy-navbar-content {
+  width: 100%;
+  max-width: var(--pholy-content-max);
+  margin-inline: auto;
+  padding-inline: var(--pholy-content-inset);
+}
+
+.pholy-navbar-search {
+  max-width: 640px;
+}
+
+.pholy-navbar #main-search-bar {
+  min-height: 44px;
+  padding-block: 11px;
+  border: 1px solid var(--immich-ui-default-border);
   background: var(--immich-ui-light);
+  color: var(--immich-ui-dark);
+  font-size: 13px;
+}
+
+.pholy-navbar #main-search-bar::placeholder {
+  color: var(--immich-ui-muted);
+  opacity: 1;
+}
+
+.pholy-navbar #main-search-bar:focus {
+  border-color: var(--immich-ui-primary-500);
+  box-shadow: 0 0 0 1px var(--immich-ui-primary-500);
 }
 
 .pholy-navbar-actions {
@@ -112,22 +152,29 @@
 }
 
 .pholy-page-shell {
-  background: var(--immich-ui-gray);
+  background: var(--pholy-canvas);
+}
+
+.pholy-main {
+  width: 100%;
+  max-width: var(--pholy-content-max);
+  margin-inline: auto;
+  background: var(--immich-ui-light);
 }
 
 .pholy-page-header {
-  min-height: 80px;
-  padding: 16px 24px;
+  min-height: 100px;
+  padding: 22px var(--pholy-content-inset);
   background: var(--immich-ui-light);
   border-color: var(--immich-ui-default-border);
 }
 
 .pholy-page-title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 650;
+  font-size: 26px;
+  font-weight: 600;
   line-height: 1.3;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.04em;
   overflow-wrap: anywhere;
 }
 
@@ -140,8 +187,37 @@
 }
 
 .pholy-page-content {
-  padding: 16px 24px;
+  padding: 24px var(--pholy-content-inset);
   background: var(--immich-ui-light);
+}
+
+.pholy-admin-shell,
+.pholy-admin-sidebar {
+  background: var(--pholy-canvas);
+}
+
+.pholy-admin-sidebar a {
+  border-radius: var(--pholy-surface-radius);
+}
+
+.pholy-admin-page {
+  width: 100%;
+  max-width: var(--pholy-content-max);
+  margin-inline: auto;
+  background: var(--immich-ui-light);
+}
+
+.pholy-admin-header {
+  min-height: 80px;
+  height: auto;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 20px var(--pholy-content-inset);
+  border-color: var(--immich-ui-default-border);
+}
+
+.pholy-admin-content {
+  padding: 24px var(--pholy-content-inset) 64px;
 }
 
 .pholy-photo-tools {
@@ -231,13 +307,17 @@
 }
 
 @media (max-width: 767px) {
+  .pholy-navbar-content {
+    padding-inline: 0 8px;
+  }
+
   .pholy-page-header {
     min-height: 70px;
     padding: 14px 16px;
   }
 
   .pholy-page-title {
-    font-size: 20px;
+    font-size: 22px;
   }
 
   .pholy-page-description {
@@ -246,6 +326,15 @@
 
   .pholy-page-content {
     padding: 12px;
+  }
+
+  .pholy-admin-header {
+    min-height: 70px;
+    padding: 14px 16px;
+  }
+
+  .pholy-admin-content {
+    padding: 16px 12px 48px;
   }
 
   .pholy-photo-tools {

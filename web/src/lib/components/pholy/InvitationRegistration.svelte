@@ -76,6 +76,7 @@
         <div class="success" role="status">
           <h2>{$t('pholy_invitation.success_heading')}</h2>
           <p>{$t('pholy_invitation.success_text')}</p>
+          <p>{$t('pholy_onboarding_registration_success')}</p>
         </div>
         <a class="primary" href={Route.login()}>{$t('pholy_landing.login')} ↗</a>
       {:else if invitation}

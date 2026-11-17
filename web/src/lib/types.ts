@@ -16,6 +16,12 @@ export enum UploadState {
   DONE,
   ERROR,
   DUPLICATED,
+  HASHING,
+  RETRYING,
+  PAUSED,
+  PROCESSING,
+  CANCELLED,
+  UPLOADED,
 }
 
 export type UploadAsset = {
@@ -24,6 +30,11 @@ export type UploadAsset = {
   assetId?: string;
   isTrashed?: boolean;
   albumId?: string;
+  albumName?: string;
+  isLockedAssets?: boolean;
+  resumable?: boolean;
+  loaded?: number;
+  attempts?: number;
   progress?: number;
   state?: UploadState;
   startDate?: number;

@@ -28,6 +28,7 @@ import { PartnerController } from 'src/controllers/partner.controller.js';
 import { PasskeyController } from 'src/controllers/passkey.controller.js';
 import { PersonController } from 'src/controllers/person.controller.js';
 import { PholyInvitationController } from 'src/controllers/pholy-invitation.controller.js';
+import { PholyUploadController } from 'src/controllers/pholy-upload.controller.js';
 import { PluginController } from 'src/controllers/plugin.controller.js';
 import { QueueController } from 'src/controllers/queue.controller.js';
 import { SearchController } from 'src/controllers/search.controller.js';
@@ -49,6 +50,7 @@ import { WorkflowController } from 'src/controllers/workflow.controller.js';
 
 export const controllers = [
   PholyInvitationController,
+  PholyUploadController,
   ApiKeyController,
   ActivityController,
   AlbumController,

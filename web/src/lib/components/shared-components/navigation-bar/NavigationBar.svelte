@@ -77,8 +77,8 @@
         />
       </a>
     </div>
-    <div class="flex min-w-0 justify-between gap-2 pe-2 md:gap-4 md:pe-5 lg:gap-6">
-      <div class="hidden w-full max-w-5xl flex-1 sm:block tall:ps-0">
+    <div class="pholy-navbar-content flex min-w-0 justify-between gap-2 md:gap-4 lg:gap-6">
+      <div class="pholy-navbar-search hidden w-full flex-1 sm:block tall:ps-0">
         <SearchBar grayTheme={true} />
       </div>
 
@@ -102,7 +102,7 @@
             class="hidden lg:flex"
             variant="filled"
             size="medium"
-            color="secondary"
+            color="primary"
             >{$t('upload')}
           </Button>
           <IconButton

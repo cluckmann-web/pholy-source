@@ -381,7 +381,7 @@ Verification:
 
 ## External source link (PHOLY .10)
 
-The source page links to GitHub release branch `releases/3.4.1-pholy.10`.
+The source page links to GitHub release branch `releases/3.4.1-pholy.11`.
 It has no direct archive download button. Before activating this release,
 verify that the GitHub repository and branch are readable without an account,
 and that the branch tree equals the source tree used by the native builder.
@@ -391,7 +391,7 @@ existing release branch to a different source tree.
 To build from the public repository, install the prerequisites above, then:
 
 ```sh
-git clone --branch releases/3.4.1-pholy.10 https://github.com/cluckmann-web/pholy-source.git
+git clone --branch releases/3.4.1-pholy.11 https://github.com/cluckmann-web/pholy-source.git
 cd pholy-source
 PHOLY_BUILD_USER="$(id -un)" \
 PHOLY_DOMAIN_ROOT=/absolute/path/to/pholy-rebuild \
@@ -403,3 +403,10 @@ After preparing the documented native dependencies, use `build` instead of
 `--check` and the appropriate `PHOLY_SHARP_MODE`. Keep the checkout clean.
 The existing source archive endpoints remain compatible with the legacy
 hash-verified import workflow, but are not offered by the public page.
+
+## Uploads and administration (.11)
+
+See [upload operations](upload-operations.md) for resumable uploads, storage
+requirements, processing limits, acceptance checks and the new administration
+overview. Invitation-only registration and native mobile compatibility remain
+part of the same application.
