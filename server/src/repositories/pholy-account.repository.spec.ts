@@ -51,6 +51,8 @@ describe.skipIf(!database)('PHOLY account transactions (isolated database)', () 
       CREATE TABLE asset_ocr (id uuid, "assetId" uuid, text text, "isVisible" boolean DEFAULT true, x1 real DEFAULT 0, y1 real DEFAULT 0, x2 real DEFAULT 1, y2 real DEFAULT 0, x3 real DEFAULT 1, y3 real DEFAULT 1, x4 real DEFAULT 0, y4 real DEFAULT 1, "updatedAt" timestamptz DEFAULT now());
       CREATE TABLE notification (id uuid, "userId" uuid, level text DEFAULT 'info', type text DEFAULT 'info', title text, description text, "createdAt" timestamptz DEFAULT now(), "updatedAt" timestamptz DEFAULT now(), "readAt" timestamptz, "deletedAt" timestamptz);
       CREATE TABLE partner ("sharedById" uuid, "sharedWithId" uuid, "inTimeline" boolean DEFAULT false, "createdAt" timestamptz DEFAULT now(), "updatedAt" timestamptz DEFAULT now());
+      CREATE TABLE pholy_comment (id uuid PRIMARY KEY, "assetId" uuid REFERENCES asset(id), "contextKind" text NOT NULL, "contextId" uuid NOT NULL, "albumId" uuid, "profileId" uuid, "authorId" uuid REFERENCES "user"(id), "parentId" uuid REFERENCES pholy_comment(id), body text NOT NULL, "deletedAt" timestamptz, "createdAt" timestamptz DEFAULT now(), "updatedAt" timestamptz DEFAULT now());
+      CREATE TABLE pholy_comment_like ("commentId" uuid REFERENCES pholy_comment(id), "userId" uuid REFERENCES "user"(id), "createdAt" timestamptz DEFAULT now(), PRIMARY KEY ("commentId", "userId"));
 
     `,
       )
@@ -164,6 +166,52 @@ describe.skipIf(!database)('PHOLY account transactions (isolated database)', () 
     expect(exported.sharedLinks[0]).not.toHaveProperty('key');
     expect(exported.sharedLinks[0]).not.toHaveProperty('password');
     expect(exported.sharedLinks[0]).not.toHaveProperty('slug');
+  });
+  it('exports only own photo comments and likes without foreign or deleted bodies or later additions', async () => {
+    const owner = await createUser();
+    const foreign = await createUser();
+    const ownAsset = randomUUID();
+    const foreignAsset = randomUUID();
+    const ownComment = randomUUID();
+    const foreignComment = randomUUID();
+    const ownReply = randomUUID();
+    const deletedComment = randomUUID();
+    const laterComment = randomUUID();
+    const before = new Date();
+    const earlier = new Date(before.getTime() - 1000);
+    const later = new Date(before.getTime() + 1000);
+    await sql`INSERT INTO asset(id,"ownerId") VALUES (${ownAsset},${owner}),(${foreignAsset},${foreign})`.execute(db);
+    await sql`INSERT INTO pholy_comment (id,"assetId","contextKind","contextId","profileId","authorId",body,"createdAt","deletedAt") VALUES
+      (${ownComment},${ownAsset},'private',${owner},NULL,${owner},'My private note',${earlier},NULL),
+      (${foreignComment},${foreignAsset},'community',${foreign},${foreign},${foreign},'FOREIGN-COMMENT-BODY',${earlier},NULL),
+      (${deletedComment},${ownAsset},'private',${owner},NULL,${owner},'DELETED-COMMENT-BODY',${earlier},${earlier}),
+      (${laterComment},${ownAsset},'private',${owner},NULL,${owner},'AFTER-EXPORT-CUTOFF',${later},NULL)`.execute(db);
+    await sql`INSERT INTO pholy_comment (id,"assetId","contextKind","contextId","profileId","authorId","parentId",body,"createdAt") VALUES
+      (${ownReply},${foreignAsset},'community',${foreign},${foreign},${owner},${foreignComment},'My reply on another photo',${earlier})`.execute(
+      db,
+    );
+    await sql`INSERT INTO pholy_comment_like ("commentId","userId","createdAt") VALUES
+      (${foreignComment},${owner},${earlier}),(${ownComment},${foreign},${earlier}),(${ownComment},${owner},${later})`.execute(
+      db,
+    );
+    const sections = repo.exportSections(owner, before);
+    const photoComments = await Array.fromAsync(
+      sections.find(({ name }) => name === 'photoComments')!.rows as AsyncIterable<Record<string, unknown>>,
+    );
+    const commentLikes = await Array.fromAsync(
+      sections.find(({ name }) => name === 'commentLikes')!.rows as AsyncIterable<Record<string, unknown>>,
+    );
+    expect(photoComments).toHaveLength(3);
+    expect(photoComments).toContainEqual(expect.objectContaining({ id: ownComment, body: 'My private note' }));
+    expect(photoComments).toContainEqual(
+      expect.objectContaining({ id: ownReply, parentId: foreignComment, body: 'My reply on another photo' }),
+    );
+    expect(photoComments).toContainEqual(expect.objectContaining({ id: deletedComment, body: '' }));
+    expect(commentLikes).toEqual([{ commentId: foreignComment, createdAt: earlier }]);
+    const serialized = JSON.stringify({ photoComments, commentLikes });
+    expect(serialized).not.toContain('FOREIGN-COMMENT-BODY');
+    expect(serialized).not.toContain('DELETED-COMMENT-BODY');
+    expect(serialized).not.toContain('AFTER-EXPORT-CUTOFF');
   });
   it('schedules exactly seven days and repeat requests do not move the deadline', async () => {
     const id = await createUser();

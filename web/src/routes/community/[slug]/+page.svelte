@@ -1,5 +1,6 @@
 <script lang="ts">
   import { authManager } from '#lib/managers/auth-manager.svelte.ts';
+  import PhotoCommentsModal from '#lib/modals/PhotoCommentsModal.svelte';
   import {
     communityImageUrl,
     followCommunityProfileMutation,
@@ -10,6 +11,7 @@
   } from '#lib/queries/pholy-community.query.ts';
   import { Route } from '#lib/route.ts';
   import '#lib/styles/pholy-community.css';
+  import { modalManager } from '@immich/ui';
   import { createMutation, createQuery } from '@tanstack/svelte-query';
   import { tick } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -45,6 +47,13 @@
       error = error_ instanceof Error ? error_.message : $t('pholy_community.error');
     }
   };
+  const openPhoto = (assetId: string) =>
+    modalManager.show(PhotoCommentsModal, {
+      assetId,
+      context: { kind: 'community', profileSlug: data.slug },
+      imageUrl: communityImageUrl(data.slug, assetId),
+      imageAlt: $t('pholy_community.photo_alt', { values: { name: profile.data?.displayName ?? '' } }),
+    });
   const sendReport = async (event: SubmitEvent) => {
     event.preventDefault();
     if (target === undefined) return;
@@ -123,11 +132,18 @@
       <div class="public-gallery">
         {#each profile.data.assets as asset (asset.id)}
           <figure>
-            <img
-              src={communityImageUrl(data.slug, asset.id)}
-              alt={$t('pholy_community.photo_alt', { values: { name: profile.data.displayName } })}
-              loading="lazy"
-            />
+            <button
+              class="gallery-photo"
+              type="button"
+              aria-label={$t('pholy_comments.open')}
+              onclick={() => openPhoto(asset.id)}
+            >
+              <img
+                src={communityImageUrl(data.slug, asset.id)}
+                alt={$t('pholy_community.photo_alt', { values: { name: profile.data.displayName } })}
+                loading="lazy"
+              />
+            </button>
             {#if authManager.authenticated && relation.data && !relation.data.ownProfile}<figcaption>
                 <button type="button" class="secondary" onclick={() => openReport(asset.id)}
                   >{$t('pholy_community.report_photo')}</button
@@ -139,3 +155,25 @@
     {/if}
   </main>
 </div>
+
+<style>
+  .gallery-photo {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .gallery-photo:focus-visible {
+    outline: 3px solid #315fd5;
+    outline-offset: 3px;
+  }
+  .gallery-photo img {
+    transition: transform 0.18s ease;
+  }
+  .gallery-photo:hover img {
+    transform: scale(1.015);
+  }
+</style>

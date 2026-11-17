@@ -26,6 +26,7 @@ import {
   realpath,
   rmdir,
   statfs,
+  unlink,
 } from "node:fs/promises";
 import { createServer } from "node:net";
 import { inflateRawSync } from "node:zlib";
@@ -355,6 +356,55 @@ function ownerFolders(account) {
   ].map((folder) => join(mediaRoot, folder, account.id));
 }
 
+async function removeSyntheticOrphanFiles(account, files) {
+  // A preview worker can finish writing after its synthetic asset was deleted.
+  // Only this run's dedicated owner folders (verified absent at preflight) may
+  // be cleaned here. Never remove an untracked path elsewhere in the share.
+  assert(
+    await guardedAccount(account),
+    "ORPHAN_CLEANUP_REQUIRES_SYNTHETIC_ACCOUNT",
+  );
+  assert((await realpath(mediaRoot)) === mediaRoot, "MEDIA_ROOT_SYMLINK");
+  assert(
+    [0xff534d42, 0xfe534d42].includes((await statfs(mediaRoot)).type >>> 0),
+    "MEDIA_NOT_CIFS",
+  );
+  const remaining =
+    await sql`SELECT id FROM asset WHERE "ownerId" = ${account.id} LIMIT 1`;
+  assert(!remaining.length, "ORPHAN_CLEANUP_ASSETS_REAPPEARED");
+  const folders = ownerFolders(account);
+  let removed = 0;
+  for (const file of files) {
+    const path = await safeMediaPath(file);
+    assert(
+      folders.some((folder) => path.startsWith(folder + sep)),
+      "ORPHAN_OUTSIDE_SYNTHETIC_OWNER_FOLDER",
+    );
+    const info = await lstat(path).catch((error) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (!info) continue;
+    assert(info.isFile(), "ORPHAN_IS_NOT_REGULAR_FILE");
+    const references = await sql`
+      SELECT 1 FROM asset WHERE "originalPath" = ${path}
+      UNION ALL SELECT 1 FROM asset_file WHERE path = ${path}
+      UNION ALL SELECT 1 FROM "user" WHERE "profileImagePath" = ${path}
+      LIMIT 1
+    `;
+    assert(!references.length, "ORPHAN_STILL_REFERENCED_BY_DATABASE");
+    await unlink(path).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    removed++;
+  }
+  if (removed)
+    log("cleanup_orphan_files", "removed", {
+      userId: account.id,
+      files: removed,
+    });
+}
+
 async function cleanup() {
   if (!sql) return;
   phase = "cleanup";
@@ -433,10 +483,12 @@ async function cleanup() {
       }
       const deadline = Date.now() + 180_000;
       let stable = 0;
+      let emptyAssetPolls = 0;
       let polls = 0;
       while (Date.now() < deadline) {
         const remainingRows = await collectAssets();
-        let remainingFiles = 0;
+        emptyAssetPolls = remainingRows.length ? 0 : emptyAssetPolls + 1;
+        const remainingFiles = new Set();
         for (const path of knownPaths) {
           const existsOnDisk = await lstat(path)
             .then(() => true)
@@ -444,17 +496,27 @@ async function cleanup() {
               if (error.code === "ENOENT") return false;
               throw error;
             });
-          if (existsOnDisk) remainingFiles++;
+          if (existsOnDisk) remainingFiles.add(path);
         }
-        for (const folder of ownerFolders(account))
-          remainingFiles += (await filesIn(folder)).length;
-        stable = !remainingRows.length && !remainingFiles ? stable + 1 : 0;
+        const ownedFiles = new Set();
+        for (const folder of ownerFolders(account)) {
+          for (const path of await filesIn(folder)) {
+            remainingFiles.add(path);
+            ownedFiles.add(path);
+          }
+        }
+        if (emptyAssetPolls >= 3 && ownedFiles.size) {
+          await removeSyntheticOrphanFiles(account, ownedFiles);
+        }
+        // Require three subsequent completely empty polls even after removing
+        // an orphan, so a finishing worker cannot immediately recreate it.
+        stable = !remainingRows.length && !remainingFiles.size ? stable + 1 : 0;
         if (stable >= 3) break;
         if (polls++ % 10 === 0)
           log("cleanup_wait", "waiting", {
             userId: account.id,
             remainingAssets: remainingRows.length,
-            remainingFiles,
+            remainingFiles: remainingFiles.size,
           });
         await delay(2000);
       }
@@ -855,6 +917,10 @@ async function main() {
     let ownedTag;
     let foreignTag;
     let ownedLink;
+    let ownPhotoComment;
+    let likedPhotoComment;
+    let privatePhotoComment;
+    let albumPhotoComment;
     const slug = "suite-" + runId.replaceAll("-", "").slice(0, 20);
     const profile = {
       slug,
@@ -1132,6 +1198,398 @@ async function main() {
       },
     );
 
+    await scenario("photo_comments_member_threads_and_moderation", async () => {
+      const context = { kind: "community", profileSlug: slug };
+      const query = new URLSearchParams(context).toString();
+      assert(
+        !new URLSearchParams(query).has("slug"),
+        "COMMENT_QUERY_USES_RESERVED_AUTH_SLUG",
+      );
+      const path = `pholy/comments/${visible.id}`;
+      await request(null, `${path}?${query}`, { expect: [401] });
+      await request(null, path, {
+        method: "POST",
+        json: { ...context, body: "An anonymous comment must be rejected." },
+        expect: [401],
+      });
+      const initial = await request(other, `${path}?${query}`);
+      assert(
+        initial.canComment &&
+          initial.total === 0 &&
+          initial.nextOffset === null,
+        "COMMENTS_NEW_CONTEXT_NOT_EMPTY",
+      );
+      ownPhotoComment = await request(owner, path, {
+        method: "POST",
+        json: { ...context, body: "  Synthetic public photo comment.  " },
+        expect: [201],
+      });
+      assert(
+        ownPhotoComment.id &&
+          ownPhotoComment.body === "Synthetic public photo comment." &&
+          ownPhotoComment.canEdit &&
+          ownPhotoComment.canDelete,
+        "COMMENT_CREATE_OR_TRIM_FAILED",
+      );
+      likedPhotoComment = await request(other, path, {
+        method: "POST",
+        json: {
+          ...context,
+          body: "Synthetic reply to the photo owner.",
+          parentId: ownPhotoComment.id,
+        },
+        expect: [201],
+      });
+      await request(owner, path, {
+        method: "POST",
+        json: {
+          ...context,
+          body: "Nested replies must not create a third level.",
+          parentId: likedPhotoComment.id,
+        },
+        expect: [400],
+      });
+      await request(owner, path, {
+        method: "POST",
+        json: { ...context, body: "  " },
+        expect: [400],
+      });
+      await request(owner, path, {
+        method: "POST",
+        json: { ...context, body: "x".repeat(2001) },
+        expect: [400],
+      });
+      const edited = await request(owner, `${path}/${ownPhotoComment.id}`, {
+        method: "PATCH",
+        json: { ...context, body: "Synthetic edited public photo comment." },
+      });
+      assert(
+        edited.body === "Synthetic edited public photo comment.",
+        "COMMENT_EDIT_NOT_SAVED",
+      );
+      await request(other, `${path}/${ownPhotoComment.id}`, {
+        method: "PATCH",
+        json: { ...context, body: "A different author cannot edit this." },
+        expect: [403, 404],
+      });
+      const likes = await Promise.all(
+        [0, 1].map(() =>
+          request(owner, `${path}/${likedPhotoComment.id}/like`, {
+            method: "PUT",
+            json: context,
+          }),
+        ),
+      );
+      assert(
+        likes.every((result) => result.liked && result.likeCount === 1),
+        "COMMENT_LIKE_NOT_IDEMPOTENT",
+      );
+      await request(other, `${path}/${ownPhotoComment.id}/like`, {
+        method: "PUT",
+        json: context,
+      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const removed = await request(
+          other,
+          `${path}/${ownPhotoComment.id}/like?${query}`,
+          { method: "DELETE" },
+        );
+        assert(
+          !removed.liked && removed.likeCount === 0,
+          "COMMENT_UNLIKE_NOT_IDEMPOTENT",
+        );
+      }
+      const thread = await request(other, `${path}?${query}`);
+      const root = thread.comments.find(
+        (comment) => comment.id === ownPhotoComment.id,
+      );
+      const reply = root?.replies.find(
+        (comment) => comment.id === likedPhotoComment.id,
+      );
+      assert(
+        root &&
+          reply &&
+          thread.total === 2 &&
+          root.body === edited.body &&
+          !root.canEdit &&
+          !root.canDelete &&
+          reply.canEdit &&
+          reply.canDelete &&
+          reply.likeCount === 1 &&
+          !reply.liked,
+        "COMMENT_THREAD_OR_PERMISSIONS_INCORRECT",
+      );
+      for (const comment of [root, reply]) {
+        assert(
+          comment.author &&
+            Object.keys(comment.author).every((key) =>
+              ["id", "name", "avatarColor", "hasProfileImage"].includes(key),
+            ) &&
+            !JSON.stringify(comment).includes("@example.invalid") &&
+            !JSON.stringify(comment).includes(mediaRoot),
+          "COMMENT_AUTHOR_PRIVATE_METADATA_EXPOSED",
+        );
+      }
+      const moderated = await request(other, path, {
+        method: "POST",
+        json: {
+          ...context,
+          body: "Synthetic comment removed by the photo owner.",
+        },
+        expect: [201],
+      });
+      const survivingReply = await request(owner, path, {
+        method: "POST",
+        json: {
+          ...context,
+          parentId: moderated.id,
+          body: "Synthetic reply remains after root removal.",
+        },
+        expect: [201],
+      });
+      await request(owner, `${path}/${moderated.id}?${query}`, {
+        method: "DELETE",
+        expect: [204],
+      });
+      const afterModeration = await request(other, `${path}?${query}`);
+      const tombstone = afterModeration.comments.find(
+        (comment) => comment.id === moderated.id,
+      );
+      assert(
+        tombstone?.deleted &&
+          !tombstone.body &&
+          !tombstone.canEdit &&
+          tombstone.replies.some(
+            (comment) => comment.id === survivingReply.id && !comment.deleted,
+          ),
+        "COMMENT_MODERATION_REMOVED_FOREIGN_REPLIES",
+      );
+      await request(other, `${path}/${moderated.id}`, {
+        method: "PATCH",
+        json: {
+          ...context,
+          body: "A moderated comment must not be restored by editing.",
+        },
+        expect: [400, 403, 404],
+      });
+      return {
+        threadedReplies: true,
+        duplicateLikes: "idempotent",
+        ownerModeration: "tombstone",
+      };
+    });
+
+    await scenario(
+      "photo_comments_private_album_and_public_isolation",
+      async () => {
+        const path = `pholy/comments/${visible.id}`;
+        const publicContext = { kind: "community", profileSlug: slug };
+        const publicQuery = new URLSearchParams(publicContext).toString();
+        assert(
+          !new URLSearchParams(publicQuery).has("slug"),
+          "COMMENT_QUERY_USES_RESERVED_AUTH_SLUG",
+        );
+        privatePhotoComment = await request(owner, path, {
+          method: "POST",
+          json: {
+            kind: "private",
+            body: "Synthetic private note must never appear in the public gallery.",
+          },
+          expect: [201],
+        });
+        for (const viewer of [other, admin]) {
+          await request(viewer, `${path}?kind=private`, { expect: [403, 404] });
+          await request(viewer, path, {
+            method: "POST",
+            json: {
+              kind: "private",
+              body: "A different member cannot access private notes.",
+            },
+            expect: [403, 404],
+          });
+        }
+        await request(owner, path, {
+          method: "POST",
+          json: {
+            ...publicContext,
+            parentId: privatePhotoComment.id,
+            body: "Private roots must not receive public replies.",
+          },
+          expect: [400, 404],
+        });
+        await request(
+          owner,
+          `${path}/${privatePhotoComment.id}?${publicQuery}`,
+          { method: "DELETE", expect: [404] },
+        );
+        await request(owner, `pholy/comments/${privatePhoto.id}`, {
+          method: "POST",
+          json: {
+            kind: "private",
+            parentId: privatePhotoComment.id,
+            body: "A root belongs to exactly one photo.",
+          },
+          expect: [400, 404],
+        });
+        const album = await request(owner, "albums", {
+          method: "POST",
+          json: {
+            albumName: `PHOLY synthetic comment album ${runId}`,
+            assetIds: [visible.id],
+            albumUsers: [{ userId: other.id, role: "editor" }],
+          },
+          expect: [201],
+        });
+        const context = { kind: "album", albumId: album.id };
+        const query = new URLSearchParams(context).toString();
+        albumPhotoComment = await request(owner, path, {
+          method: "POST",
+          json: {
+            ...context,
+            body: "Synthetic shared album discussion remains in this album.",
+          },
+          expect: [201],
+        });
+        const albumReply = await request(other, path, {
+          method: "POST",
+          json: {
+            ...context,
+            parentId: albumPhotoComment.id,
+            body: "Synthetic album member reply.",
+          },
+          expect: [201],
+        });
+        const legacy = await request(other, "activities", {
+          method: "POST",
+          json: {
+            albumId: album.id,
+            assetId: visible.id,
+            type: "comment",
+            comment: "Synthetic existing Immich activity remains available.",
+          },
+          expect: [200, 201],
+        });
+        const oldActivities = await request(
+          other,
+          `activities?albumId=${album.id}&assetId=${visible.id}`,
+        );
+        assert(
+          oldActivities.some((activity) => activity.id === legacy.id),
+          "NATIVE_ALBUM_ACTIVITY_BROKEN",
+        );
+        const albumThread = await request(other, `${path}?${query}`);
+        assert(
+          albumThread.total === 2 &&
+            albumThread.comments.length === 1 &&
+            albumThread.comments[0].id === albumPhotoComment.id &&
+            albumThread.comments[0].replies.some(
+              (comment) => comment.id === albumReply.id,
+            ),
+          "ALBUM_COMMENTS_NOT_SCOPED",
+        );
+        const publicThread = await request(other, `${path}?${publicQuery}`);
+        assert(
+          !publicThread.comments.some((comment) =>
+            [privatePhotoComment.id, albumPhotoComment.id].includes(comment.id),
+          ),
+          "PRIVATE_OR_ALBUM_COMMENTS_EXPOSED_IN_COMMUNITY",
+        );
+        const privateThread = await request(owner, `${path}?kind=private`);
+        assert(
+          privateThread.total === 1 &&
+            privateThread.comments[0].id === privatePhotoComment.id,
+          "COMMENT_CONTEXTS_MIXED",
+        );
+        await request(other, `pholy/comments/${foreign.id}?${query}`, {
+          expect: [403, 404],
+        });
+        await request(owner, `albums/${album.id}`, {
+          method: "PATCH",
+          json: { isActivityEnabled: false },
+        });
+        assert(
+          !(await request(other, `${path}?${query}`)).canComment,
+          "DISABLED_ALBUM_COMMENTS_STILL_ENABLED",
+        );
+        await request(other, path, {
+          method: "POST",
+          json: {
+            ...context,
+            body: "Disabled album comments must reject writes.",
+          },
+          expect: [403],
+        });
+        await request(owner, `albums/${album.id}`, {
+          method: "PATCH",
+          json: { isActivityEnabled: true },
+        });
+        await request(owner, `albums/${album.id}/user/${other.id}`, {
+          method: "DELETE",
+          expect: [204],
+        });
+        await request(other, `${path}?${query}`, { expect: [403, 404] });
+        await request(owner, `albums/${album.id}/users`, {
+          method: "PUT",
+          json: { albumUsers: [{ userId: other.id, role: "editor" }] },
+        });
+        await request(owner, `albums/${album.id}/assets`, {
+          method: "DELETE",
+          json: { ids: [visible.id] },
+        });
+        await request(other, `${path}?${query}`, { expect: [403, 404] });
+        await request(owner, `albums/${album.id}/assets`, {
+          method: "PUT",
+          json: { ids: [visible.id] },
+        });
+        return {
+          isolatedContexts: 3,
+          revokedAlbumAccess: "blocked",
+          legacyActivities: "preserved",
+        };
+      },
+    );
+
+    await scenario("photo_comments_publication_revocation", async () => {
+      const context = { kind: "community", profileSlug: slug };
+      const query = new URLSearchParams(context).toString();
+      assert(
+        !new URLSearchParams(query).has("slug"),
+        "COMMENT_QUERY_USES_RESERVED_AUTH_SLUG",
+      );
+      const path = `pholy/comments/${visible.id}`;
+      await request(owner, "pholy/community/me", {
+        method: "PUT",
+        json: { ...profile, published: false },
+      });
+      await request(other, `${path}?${query}`, { expect: [404] });
+      await request(other, path, {
+        method: "POST",
+        json: {
+          ...context,
+          body: "Unpublished community photos cannot accept comments.",
+        },
+        expect: [404],
+      });
+      await request(owner, "pholy/community/me", {
+        method: "PUT",
+        json: profile,
+      });
+      await request(owner, "pholy/community/me", {
+        method: "PUT",
+        json: { ...profile, assetIds: [] },
+      });
+      await request(other, `${path}?${query}`, { expect: [404] });
+      await request(owner, "pholy/community/me", {
+        method: "PUT",
+        json: profile,
+      });
+      const restored = await request(other, `${path}?${query}`);
+      assert(
+        restored.comments.some((comment) => comment.id === ownPhotoComment.id),
+        "REPUBLISHED_COMMENT_THREAD_LOST",
+      );
+    });
+
     await scenario(
       "community_follow_report_moderation_and_revocation",
       async () => {
@@ -1273,6 +1731,40 @@ async function main() {
           binary: true,
         });
         assert(avatarBytes.length > 0, "AVATAR_HTTP_UPLOAD_FAILED");
+        const commentQuery = new URLSearchParams({
+          kind: "community",
+          profileSlug: slug,
+        }).toString();
+        assert(
+          !new URLSearchParams(commentQuery).has("slug"),
+          "COMMENT_QUERY_USES_RESERVED_AUTH_SLUG",
+        );
+        const avatarPath = `pholy/comments/${visible.id}/authors/${owner.id}/avatar?${commentQuery}`;
+        await request(null, avatarPath, { expect: [401] });
+        await request(
+          other,
+          `pholy/comments/${visible.id}/authors/${admin.id}/avatar?${commentQuery}`,
+          { expect: [404] },
+        );
+        await request(
+          other,
+          `pholy/comments/${visible.id}/authors/${owner.id}/avatar?kind=private`,
+          { expect: [403, 404] },
+        );
+        const commentAvatar = await request(other, avatarPath, { raw: true });
+        const commentAvatarMetadata = await sharp(
+          commentAvatar.bytes,
+        ).metadata();
+        assert(
+          commentAvatar.headers.get("content-type")?.startsWith("image/jpeg") &&
+            commentAvatar.headers.get("cache-control")?.includes("no-store") &&
+            commentAvatarMetadata.format === "jpeg" &&
+            !commentAvatarMetadata.exif &&
+            !commentAvatarMetadata.xmp &&
+            commentAvatarMetadata.width <= 256 &&
+            commentAvatarMetadata.height <= 256,
+          "COMMENT_AVATAR_PRIVATE_METADATA_EXPOSED",
+        );
         ownedTag = await request(owner, "tags", {
           method: "POST",
           json: { name: "Synthetic owned export tag" },
@@ -1384,7 +1876,27 @@ async function main() {
             metadata.communityProfile?.some((item) => item.slug === slug),
           "EXPORT_NEW_ACCOUNT_DATA_MISSING",
         );
+        assert(
+          metadata.photoComments?.some(
+            (comment) => comment.id === ownPhotoComment.id,
+          ) &&
+            metadata.photoComments?.some(
+              (comment) => comment.id === privatePhotoComment.id,
+            ) &&
+            metadata.photoComments?.some(
+              (comment) => comment.id === albumPhotoComment.id,
+            ) &&
+            !metadata.photoComments?.some(
+              (comment) => comment.id === likedPhotoComment.id,
+            ) &&
+            metadata.commentLikes?.some(
+              (like) => like.commentId === likedPhotoComment.id,
+            ),
+          "EXPORT_COMMENTS_OR_LIKES_INCOMPLETE_OR_FOREIGN",
+        );
         for (const section of [
+          "photoComments",
+          "commentLikes",
           "tags",
           "tagAssets",
           "people",
@@ -1747,7 +2259,7 @@ async function main() {
       );
     });
     log("acceptance", "pass", {
-      scenarios: 11,
+      scenarios: 14,
       syntheticUsers: accounts.length,
       externalMessages: 0,
     });

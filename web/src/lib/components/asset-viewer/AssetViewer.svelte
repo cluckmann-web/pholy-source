@@ -14,12 +14,13 @@
   import { EditToolType, editManager } from '#lib/managers/edit/edit-manager.svelte.ts';
   import { eventManager } from '#lib/managers/event-manager.svelte.ts';
   import type { TimelineAsset } from '#lib/managers/timeline-manager/types.ts';
+  import PhotoCommentsModal from '#lib/modals/PhotoCommentsModal.svelte';
   import { getAssetActions } from '#lib/services/asset.service.ts';
   import { faceManager } from '#lib/stores/face.svelte.ts';
   import { ocrManager } from '#lib/stores/ocr.svelte.ts';
   import { alwaysLoadOriginalVideo } from '#lib/stores/preferences.store.ts';
   import { SlideshowNavigation, SlideshowState, slideshowStore } from '#lib/stores/slideshow.store.ts';
-  import { getSharedLink, handlePromiseError } from '#lib/utils.ts';
+  import { getAssetMediaUrl, getSharedLink, handlePromiseError } from '#lib/utils.ts';
   import type { OnUndoDelete } from '#lib/utils/actions.ts';
   import { navigateToAsset } from '#lib/utils/asset-utils.ts';
   import { handleError } from '#lib/utils/handle-error.ts';
@@ -28,7 +29,9 @@
   import { SlideshowHistory } from '#lib/utils/slideshow-history.ts';
   import { toTimelineAsset } from '#lib/utils/timeline-util.ts';
   import {
+    AssetMediaSize,
     AssetTypeEnum,
+    AssetVisibility,
     getAssetInfo,
     getStack,
     type AlbumResponseDto,
@@ -36,7 +39,8 @@
     type PersonResponseDto,
     type StackResponseDto,
   } from '@immich/sdk';
-  import { CommandPaletteDefaultProvider } from '@immich/ui';
+  import { CommandPaletteDefaultProvider, Icon, modalManager } from '@immich/ui';
+  import { mdiCommentOutline } from '@mdi/js';
   import { onDestroy, onMount, untrack } from 'svelte';
   import type { SwipeCustomEvent } from 'svelte-gestures';
   import { t } from 'svelte-i18n';
@@ -470,6 +474,25 @@
       !assetViewerManager.isShowEditor,
   );
 
+  const canOpenPhotoComments = $derived(
+    authManager.authenticated &&
+      !authManager.isSharedLink &&
+      !sharedLink &&
+      asset.type === AssetTypeEnum.Image &&
+      asset.visibility !== AssetVisibility.Locked &&
+      !asset.isTrashed &&
+      (Boolean(album) || asset.ownerId === authManager.user.id) &&
+      $slideshowState === SlideshowState.None &&
+      !assetViewerManager.isShowEditor,
+  );
+  const openPhotoComments = () =>
+    modalManager.show(PhotoCommentsModal, {
+      assetId: asset.id,
+      context: album ? { kind: 'album', albumId: album.id } : { kind: 'private' },
+      imageUrl: getAssetMediaUrl({ id: asset.id, size: AssetMediaSize.Preview, cacheKey: asset.thumbhash }),
+      imageAlt: $t('pholy_comments.photo'),
+    });
+
   const onSwipe = (event: SwipeCustomEvent) => {
     if (assetViewerManager.zoom > 1) {
       return;
@@ -597,6 +620,14 @@
       />
     {/if}
 
+    {#if canOpenPhotoComments}
+      <div class="absolute bottom-0 left-0 mb-6 ml-6">
+        <button class="pholy-photo-comments-button" type="button" onclick={openPhotoComments}
+          ><Icon icon={mdiCommentOutline} size="20" />{$t('pholy_comments.title')}</button
+        >
+      </div>
+    {/if}
+
     {#if showActivityStatus}
       <div class="absolute inset-e-0 bottom-0 me-8 mb-20">
         <ActivityStatus
@@ -697,6 +728,23 @@
 </section>
 
 <style>
+  .pholy-photo-comments-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 16px;
+    background: rgba(255, 255, 255, 0.94);
+    color: #172033;
+    border: 1px solid #dce2ea;
+    border-radius: 0;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .pholy-photo-comments-button:focus-visible {
+    outline: 3px solid #5c8cff;
+    outline-offset: 3px;
+  }
   #immich-asset-viewer {
     contain: layout;
   }

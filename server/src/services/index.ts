@@ -1,9 +1,3 @@
-import { PholySupportService } from 'src/services/pholy-support.service.js';
-import { PholyMailService } from 'src/services/pholy-mail.service.js';
-import { PholyHistoryService } from 'src/services/pholy-history.service.js';
-import { PholyCommunityService } from 'src/services/pholy-community.service.js';
-import { PholyAuthService } from 'src/services/pholy-auth.service.js';
-import { PholyAccountService } from 'src/services/pholy-account.service.js';
 import { ActivityService } from 'src/services/activity.service.js';
 import { AlbumService } from 'src/services/album.service.js';
 import { ApiKeyService } from 'src/services/api-key.service.js';
@@ -35,7 +29,14 @@ import { OcrService } from 'src/services/ocr.service.js';
 import { PartnerService } from 'src/services/partner.service.js';
 import { PasskeyService } from 'src/services/passkey.service.js';
 import { PersonService } from 'src/services/person.service.js';
+import { PholyAccountService } from 'src/services/pholy-account.service.js';
+import { PholyAuthService } from 'src/services/pholy-auth.service.js';
+import { PholyCommentService } from 'src/services/pholy-comment.service.js';
+import { PholyCommunityService } from 'src/services/pholy-community.service.js';
+import { PholyHistoryService } from 'src/services/pholy-history.service.js';
 import { PholyInvitationService } from 'src/services/pholy-invitation.service.js';
+import { PholyMailService } from 'src/services/pholy-mail.service.js';
+import { PholySupportService } from 'src/services/pholy-support.service.js';
 import { PholyUploadService } from 'src/services/pholy-upload.service.js';
 import { PluginService } from 'src/services/plugin.service.js';
 import { QueueService } from 'src/services/queue.service.js';
@@ -63,6 +64,7 @@ import { WorkflowExecutionService } from 'src/services/workflow-execution.servic
 import { WorkflowService } from 'src/services/workflow.service.js';
 
 export const services = [
+  PholyCommentService,
   PholySupportService,
   PholyMailService,
   PholyHistoryService,

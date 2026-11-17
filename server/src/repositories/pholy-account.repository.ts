@@ -5,6 +5,7 @@ import { columns } from 'src/database.js';
 import { AlbumUserRole, UserMetadataKey, UserStatus } from 'src/enum.js';
 import { DB } from 'src/schema/index.js';
 import { PholyAccountStateTable } from 'src/schema/tables/pholy-account-state.table.js';
+import { PholyCommentLikeTable, PholyCommentTable } from 'src/schema/tables/pholy-comment.table.js';
 import {
   PholyCommunityAssetTable,
   PholyCommunityFollowTable,
@@ -16,6 +17,8 @@ import { PholyUploadHistoryTable } from 'src/schema/tables/pholy-upload-history.
 
 type AccountDB = DB & {
   pholy_account_state: PholyAccountStateTable;
+  pholy_comment: PholyCommentTable;
+  pholy_comment_like: PholyCommentLikeTable;
   pholy_community_profile: PholyCommunityProfileTable;
   pholy_community_asset: PholyCommunityAssetTable;
   pholy_community_follow: PholyCommunityFollowTable;
@@ -464,6 +467,40 @@ export class PholyAccountRepository {
           .selectFrom('pholy_community_report')
           .select(['id', 'userId', 'assetId', 'reason', 'details', 'createdAt', 'resolvedAt', 'action'])
           .where('reporterId', '=', userId)
+          .stream(),
+      },
+      {
+        name: 'photoComments',
+        rows: this.db
+          .selectFrom('pholy_comment')
+          .select([
+            'id',
+            'assetId',
+            'contextKind',
+            'contextId',
+            'albumId',
+            'profileId',
+            'parentId',
+            'createdAt',
+            'updatedAt',
+            'deletedAt',
+          ])
+          .select(sql<string>`CASE WHEN "deletedAt" IS NULL THEN body ELSE '' END`.as('body'))
+          .where('authorId', '=', userId)
+          .where('createdAt', '<=', before)
+          .orderBy('createdAt')
+          .orderBy('id')
+          .stream(),
+      },
+      {
+        name: 'commentLikes',
+        rows: this.db
+          .selectFrom('pholy_comment_like')
+          .select(['commentId', 'createdAt'])
+          .where('userId', '=', userId)
+          .where('createdAt', '<=', before)
+          .orderBy('createdAt')
+          .orderBy('commentId')
           .stream(),
       },
       {

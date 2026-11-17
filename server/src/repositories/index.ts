@@ -1,8 +1,3 @@
-import { PholySupportRepository } from 'src/repositories/pholy-support.repository.js';
-import { PholyHistoryRepository } from 'src/repositories/pholy-history.repository.js';
-import { PholyCommunityRepository } from 'src/repositories/pholy-community.repository.js';
-import { PholyAuthRepository } from 'src/repositories/pholy-auth.repository.js';
-import { PholyAccountRepository } from 'src/repositories/pholy-account.repository.js';
 import { AccessRepository } from 'src/repositories/access.repository.js';
 import { ActivityRepository } from 'src/repositories/activity.repository.js';
 import { AlbumUserRepository } from 'src/repositories/album-user.repository.js';
@@ -40,7 +35,13 @@ import { PartnerRepository } from 'src/repositories/partner.repository.js';
 import { PasskeyRepository } from 'src/repositories/passkey.repository.js';
 import { PersonUserRepository } from 'src/repositories/person-user.repository.js';
 import { PersonRepository } from 'src/repositories/person.repository.js';
+import { PholyAccountRepository } from 'src/repositories/pholy-account.repository.js';
+import { PholyAuthRepository } from 'src/repositories/pholy-auth.repository.js';
+import { PholyCommentRepository } from 'src/repositories/pholy-comment.repository.js';
+import { PholyCommunityRepository } from 'src/repositories/pholy-community.repository.js';
+import { PholyHistoryRepository } from 'src/repositories/pholy-history.repository.js';
 import { PholyInvitationRepository } from 'src/repositories/pholy-invitation.repository.js';
+import { PholySupportRepository } from 'src/repositories/pholy-support.repository.js';
 import { PholyUploadRepository } from 'src/repositories/pholy-upload.repository.js';
 import { PluginRepository } from 'src/repositories/plugin.repository.js';
 import { ProcessRepository } from 'src/repositories/process.repository.js';
@@ -66,6 +67,7 @@ import { WebsocketRepository } from 'src/repositories/websocket.repository.js';
 import { WorkflowRepository } from 'src/repositories/workflow.repository.js';
 
 export const repositories = [
+  PholyCommentRepository,
   PholySupportRepository,
   PholyHistoryRepository,
   PholyCommunityRepository,

@@ -382,7 +382,7 @@ Verification:
 
 ## External source link (PHOLY .10)
 
-The source page links to GitHub release branch `releases/3.4.1-pholy.13`.
+The source page links to GitHub release branch `releases/3.4.1-pholy.14`.
 It has no direct archive download button. Before activating this release,
 verify that the GitHub repository and branch are readable without an account,
 and that the branch tree equals the source tree used by the native builder.
@@ -392,7 +392,7 @@ existing release branch to a different source tree.
 To build from the public repository, install the prerequisites above, then:
 
 ```sh
-git clone --branch releases/3.4.1-pholy.13 https://github.com/cluckmann-web/pholy-source.git
+git clone --branch releases/3.4.1-pholy.14 https://github.com/cluckmann-web/pholy-source.git
 cd pholy-source
 PHOLY_BUILD_USER="$(id -un)" \
 PHOLY_DOMAIN_ROOT=/absolute/path/to/pholy-rebuild \
@@ -418,3 +418,10 @@ Password recovery, invitation email, persistent upload history, quota warnings,
 in-app support, account export/closure and optional public galleries are documented
 in [platform-operations.md](platform-operations.md). The invitation-only free
 model and native Immich app compatibility remain in place.
+
+## Photo comments (.14)
+
+Photo comments use a Facebook-style discussion with replies, comment likes, editing
+and owner moderation. See [comment operations](comment-operations.md) for access
+contexts, limits, data handling and verification. Native album activity remains
+available for compatibility with existing comments and mobile clients.

@@ -1,8 +1,3 @@
-import { PholyUploadHistoryTable, PholyAlertStateTable } from 'src/schema/tables/pholy-upload-history.table.js';
-import { PholySupportTicketTable, PholySupportMessageTable } from 'src/schema/tables/pholy-support.table.js';
-import { PholyPasswordResetTable } from 'src/schema/tables/pholy-password-reset.table.js';
-import { PholyCommunityProfileTable, PholyCommunityAssetTable, PholyCommunityFollowTable, PholyCommunityReportTable } from 'src/schema/tables/pholy-community.table.js';
-import { PholyAccountStateTable } from 'src/schema/tables/pholy-account-state.table.js';
 import { Database, Extensions, Generated, Int8 } from '@immich/sql-tools';
 import {
   album_user_role_enum,
@@ -78,7 +73,22 @@ import { PersonGroupAuditTable } from 'src/schema/tables/person-group-audit.tabl
 import { PersonGroupTable } from 'src/schema/tables/person-group.table.js';
 import { PersonUserTable } from 'src/schema/tables/person-user.table.js';
 import { PersonTable } from 'src/schema/tables/person.table.js';
+import { PholyAccountStateTable } from 'src/schema/tables/pholy-account-state.table.js';
+import {
+  PholyCommentLikeTable,
+  PholyCommentRateTable,
+  PholyCommentTable,
+} from 'src/schema/tables/pholy-comment.table.js';
+import {
+  PholyCommunityAssetTable,
+  PholyCommunityFollowTable,
+  PholyCommunityProfileTable,
+  PholyCommunityReportTable,
+} from 'src/schema/tables/pholy-community.table.js';
 import { PholyInvitationTable } from 'src/schema/tables/pholy-invitation.table.js';
+import { PholyPasswordResetTable } from 'src/schema/tables/pholy-password-reset.table.js';
+import { PholySupportMessageTable, PholySupportTicketTable } from 'src/schema/tables/pholy-support.table.js';
+import { PholyAlertStateTable, PholyUploadHistoryTable } from 'src/schema/tables/pholy-upload-history.table.js';
 import { PluginMethodTable } from 'src/schema/tables/plugin-method.table.js';
 import { PluginTable } from 'src/schema/tables/plugin.table.js';
 import { SessionTable } from 'src/schema/tables/session.table.js';
@@ -110,6 +120,9 @@ import { WorkflowTable } from 'src/schema/tables/workflow.table.js';
 @Database({ name: 'immich' })
 export class ImmichDatabase {
   tables = [
+    PholyCommentTable,
+    PholyCommentLikeTable,
+    PholyCommentRateTable,
     PholyUploadHistoryTable,
     PholyAlertStateTable,
     PholySupportTicketTable,
@@ -229,6 +242,9 @@ export interface Migrations {
 }
 
 export interface DB {
+  pholy_comment: PholyCommentTable;
+  pholy_comment_like: PholyCommentLikeTable;
+  pholy_comment_rate: PholyCommentRateTable;
   pholy_upload_history: PholyUploadHistoryTable;
   pholy_alert_state: PholyAlertStateTable;
   pholy_support_ticket: PholySupportTicketTable;

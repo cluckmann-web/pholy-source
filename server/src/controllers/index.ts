@@ -1,8 +1,3 @@
-import { PholySupportController } from 'src/controllers/pholy-support.controller.js';
-import { PholyHistoryController } from 'src/controllers/pholy-history.controller.js';
-import { PholyCommunityController } from 'src/controllers/pholy-community.controller.js';
-import { PholyAuthController } from 'src/controllers/pholy-auth.controller.js';
-import { PholyAccountController } from 'src/controllers/pholy-account.controller.js';
 import { ActivityController } from 'src/controllers/activity.controller.js';
 import { AlbumController } from 'src/controllers/album.controller.js';
 import { ApiKeyController } from 'src/controllers/api-key.controller.js';
@@ -32,7 +27,13 @@ import { OAuthController } from 'src/controllers/oauth.controller.js';
 import { PartnerController } from 'src/controllers/partner.controller.js';
 import { PasskeyController } from 'src/controllers/passkey.controller.js';
 import { PersonController } from 'src/controllers/person.controller.js';
+import { PholyAccountController } from 'src/controllers/pholy-account.controller.js';
+import { PholyAuthController } from 'src/controllers/pholy-auth.controller.js';
+import { PholyCommentController } from 'src/controllers/pholy-comment.controller.js';
+import { PholyCommunityController } from 'src/controllers/pholy-community.controller.js';
+import { PholyHistoryController } from 'src/controllers/pholy-history.controller.js';
 import { PholyInvitationController } from 'src/controllers/pholy-invitation.controller.js';
+import { PholySupportController } from 'src/controllers/pholy-support.controller.js';
 import { PholyUploadController } from 'src/controllers/pholy-upload.controller.js';
 import { PluginController } from 'src/controllers/plugin.controller.js';
 import { QueueController } from 'src/controllers/queue.controller.js';
@@ -54,6 +55,7 @@ import { ViewController } from 'src/controllers/view.controller.js';
 import { WorkflowController } from 'src/controllers/workflow.controller.js';
 
 export const controllers = [
+  PholyCommentController,
   PholySupportController,
   PholyHistoryController,
   PholyCommunityController,
