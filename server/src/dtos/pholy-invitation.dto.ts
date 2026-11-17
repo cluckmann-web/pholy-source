@@ -8,6 +8,7 @@ export class PholyInvitationCreateDto extends createZodDto(
   z
     .object({
       email: toEmail,
+      sendEmail: z.boolean().optional().default(false),
       quotaGiB: z.number().int().min(1).max(10_000).nullable().default(null),
     })
     .strict(),

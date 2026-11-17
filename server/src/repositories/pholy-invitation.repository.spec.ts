@@ -5,6 +5,7 @@ import postgres from 'postgres';
 import { PholyInvitationRepository } from 'src/repositories/pholy-invitation.repository.js';
 import type { DB } from 'src/schema/index.js';
 import { down, up } from 'src/schema/migrations/1794916800000-PholyInvitations.js';
+import { down as mailDown, up as mailUp } from 'src/schema/migrations/1794950000001-PholyAccountMail.js';
 
 const hash = (s: string) => createHash('sha256').update(s).digest();
 const database = process.env.PHOLY_INVITATION_TEST_DATABASE;
@@ -41,6 +42,7 @@ describe.skipIf(!database)('PHOLY invitation transactions (isolated database)', 
       )
       .execute(db);
     await up(db);
+    await mailUp(db);
     repo = new PholyInvitationRepository(db);
     owner = randomUUID();
     await sql`INSERT INTO "user" (id,email,name,"isAdmin") VALUES (${owner},'admin@example.test','Admin',true)`.execute(
@@ -52,6 +54,7 @@ describe.skipIf(!database)('PHOLY invitation transactions (isolated database)', 
       return;
     }
 
+    await mailDown(db);
     await down(db);
     await db.destroy();
   });
@@ -104,6 +107,29 @@ describe.skipIf(!database)('PHOLY invitation transactions (isolated database)', 
     expect(await db.selectFrom('user').select('id').where('email', '=', 'compete@example.test').execute()).toHaveLength(
       1,
     );
+  });
+  it('invalidates old links on mail resend, rate limits repeated sends and ignores stale delivery updates', async () => {
+    const invitation = await invite('resend@example.test', 'before-send');
+    const sent = await repo.rotateForMail(invitation.id, hash('after-send'));
+    expect(sent.mailStatus).toBe('sending');
+    expect(await repo.findValid(hash('before-send'))).toBeUndefined();
+    expect(await repo.findValid(hash('after-send'))).toHaveProperty('id', invitation.id);
+    await expect(repo.rotateForMail(invitation.id, hash('too-soon'))).rejects.toThrow('Minute');
+    await expect(repo.finishMail(invitation.id, hash('before-send'), 'accepted')).rejects.toMatchObject({
+      status: 409,
+      response: { message: 'Die Einladung wurde inzwischen geändert oder entfernt. Bitte aktualisiere die Übersicht.' },
+    });
+    const current = await db
+      .selectFrom('pholy_invitation')
+      .select(['mailStatus', 'tokenHash'])
+      .where('id', '=', invitation.id)
+      .executeTakeFirstOrThrow();
+    expect(current.mailStatus).toBe('sending');
+    expect(current.tokenHash).toEqual(hash('after-send'));
+    const failed = await repo.finishMail(invitation.id, hash('after-send'), 'failed');
+    expect(failed.mailStatus).toBe('failed');
+    await repo.revoke(invitation.id);
+    await expect(repo.rotateForMail(invitation.id, hash('revoked'))).rejects.toThrow();
   });
   it('refuses existing accounts and removes accepted invitation on final user deletion', async () => {
     await expect(invite('admin@example.test', 'existing')).rejects.toThrow();

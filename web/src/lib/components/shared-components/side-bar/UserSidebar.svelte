@@ -21,6 +21,8 @@
     mdiFolderOutline,
     mdiHeart,
     mdiHeartOutline,
+    mdiHelpCircleOutline,
+    mdiHistory,
     mdiImageAlbum,
     mdiImageMultiple,
     mdiImageMultipleOutline,
@@ -30,6 +32,7 @@
     mdiMagnify,
     mdiMap,
     mdiMapOutline,
+    mdiShieldAccountOutline,
     mdiTagMultipleOutline,
     mdiToolbox,
     mdiToolboxOutline,
@@ -110,7 +113,21 @@
     <NavbarItem title={$t('shared_links')} href={Route.sharedLinks()} icon={mdiLink} class="pholy-nav-item" />
   {/if}
 
+  <NavbarItem
+    title={$t('pholy_nav_community')}
+    href={Route.community()}
+    icon={mdiAccountMultipleOutline}
+    class="pholy-nav-item"
+  />
+
   <h2 class="pholy-nav-group-title">{copy.organize}</h2>
+
+  <NavbarItem
+    title={$t('pholy_nav_upload_history')}
+    href={Route.uploadHistory()}
+    icon={mdiHistory}
+    class="pholy-nav-item"
+  />
 
   {#if authManager.preferences.tags.enabled && authManager.preferences.tags.sidebarWeb}
     <NavbarItem
@@ -182,6 +199,14 @@
     activeIcon={mdiAccountCircle}
     class="pholy-nav-item"
   />
+
+  <NavbarItem
+    title={$t('pholy_nav_account')}
+    href={Route.account()}
+    icon={mdiShieldAccountOutline}
+    class="pholy-nav-item"
+  />
+  <NavbarItem title={$t('pholy_nav_help')} href={Route.help()} icon={mdiHelpCircleOutline} class="pholy-nav-item" />
 
   <div class="pholy-sidebar-footer mt-auto pt-5">
     <BottomInfo />

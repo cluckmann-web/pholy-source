@@ -4,7 +4,18 @@ import { InjectKysely } from 'nestjs-kysely';
 import { DB } from 'src/schema/index.js';
 
 export const PHOLY_INVITATION_INVALID = 'Diese Einladung ist ungültig, abgelaufen oder bereits verwendet.';
-const visibleColumns = ['id', 'email', 'createdAt', 'expiresAt', 'usedAt', 'revokedAt', 'quotaSizeInBytes'] as const;
+const visibleColumns = [
+  'id',
+  'email',
+  'createdAt',
+  'expiresAt',
+  'usedAt',
+  'revokedAt',
+  'quotaSizeInBytes',
+  'mailStatus',
+  'mailAttemptedAt',
+  'mailAcceptedAt',
+] as const;
 
 @Injectable()
 export class PholyInvitationRepository {
@@ -16,6 +27,8 @@ export class PholyInvitationRepository {
     createdBy: string;
     expiresAt: Date;
     quotaSizeInBytes: number | null;
+    mailStatus?: string;
+    mailAttemptedAt?: Date | null;
   }) {
     return this.db.transaction().execute(async (trx) => {
       await sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.email}, 0))`.execute(trx);
@@ -39,6 +52,59 @@ export class PholyInvitationRepository {
       .orderBy('createdAt', 'desc')
       .limit(200)
       .execute();
+  }
+
+  async rotateForMail(id: string, tokenHash: Buffer) {
+    return this.db.transaction().execute(async (trx) => {
+      const candidate = await trx
+        .selectFrom('pholy_invitation')
+        .select('email')
+        .where('id', '=', id)
+        .executeTakeFirst();
+      if (!candidate) throw new BadRequestException(PHOLY_INVITATION_INVALID);
+      await sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.email}, 0))`.execute(trx);
+      const invitation = await trx
+        .selectFrom('pholy_invitation')
+        .selectAll()
+        .where('id', '=', id)
+        .forUpdate()
+        .executeTakeFirst();
+      if (!invitation || invitation.usedAt || invitation.revokedAt)
+        throw new BadRequestException(PHOLY_INVITATION_INVALID);
+      if (invitation.mailAttemptedAt && invitation.mailAttemptedAt.getTime() > Date.now() - 60_000)
+        throw new ConflictException('Bitte warte eine Minute, bevor du erneut sendest.');
+      if (await trx.selectFrom('user').select('id').where('email', '=', invitation.email).executeTakeFirst())
+        throw new ConflictException('Für diese E-Mail-Adresse besteht bereits ein Konto.');
+      return trx
+        .updateTable('pholy_invitation')
+        .set({
+          tokenHash,
+          expiresAt: new Date(Date.now() + 7 * 86_400_000),
+          mailStatus: 'sending',
+          mailAttemptedAt: new Date(),
+          mailAcceptedAt: null,
+        })
+        .where('id', '=', id)
+        .returning(visibleColumns)
+        .executeTakeFirstOrThrow();
+    });
+  }
+
+  async finishMail(id: string, tokenHash: Buffer, status: 'accepted' | 'disabled' | 'failed') {
+    const invitation = await this.db
+      .updateTable('pholy_invitation')
+      .set({ mailStatus: status, mailAcceptedAt: status === 'accepted' ? new Date() : null })
+      .where('id', '=', id)
+      .where('tokenHash', '=', tokenHash)
+      .returning(visibleColumns)
+      .executeTakeFirst();
+    if (!invitation) {
+      // A later send owns the current token/status; never return the earlier secret URL.
+      throw new ConflictException(
+        'Die Einladung wurde inzwischen geändert oder entfernt. Bitte aktualisiere die Übersicht.',
+      );
+    }
+    return invitation;
   }
 
   findValid(tokenHash: Buffer) {

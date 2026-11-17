@@ -4,13 +4,14 @@ import { expect, test } from '#test/medium/fixtures.ts';
 const token = 'a'.repeat(43);
 const preview = {
   email: 'invitee@example.test',
-  expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+  expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
   quotaSizeInBytes: 100 * 1024 ** 3,
   termsVersion: '2026-11-17',
 };
 test.use({ language: 'de' });
 test.afterEach(async ({ page }) => {
   await page.unroute('**/api/pholy/invitations**');
+  await page.unroute('**/api/pholy/auth/status');
 });
 for (const width of [1440, 390, 320]) {
   test('invitation form and app setup at ' + width + 'px', async ({ page, context }, testInfo) => {
@@ -97,6 +98,9 @@ test('requires matching passwords and terms, submits once, then keeps app guidan
 });
 test('administrator creates and revokes an invitation without sending mail', async ({ page, data }, testInfo) => {
   data.user.isAdmin = true;
+  await page.route('**/api/pholy/auth/status', (route) =>
+    route.fulfill({ json: { mailEnabled: false, passwordLoginEnabled: true } }),
+  );
   let items: unknown[] = [];
   let created: unknown;
   let deleted = false;
@@ -126,7 +130,7 @@ test('administrator creates and revokes an invitation without sending mail', asy
   await page.locator('input[type=email]').fill(preview.email);
   await page.getByRole('button', { name: 'Einladungslink erstellen', exact: true }).click();
   await expect(page.locator('input[readonly]')).toHaveValue('https://pholy.de/auth/register#invitation=' + token);
-  expect(created).toEqual({ email: preview.email, quotaGiB: 100 });
+  expect(created).toEqual({ email: preview.email, quotaGiB: 100, sendEmail: false });
   await expect(page.getByText(preview.email, { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('invitations-admin.png'), fullPage: true });
   await page.getByRole('button', { name: 'Widerrufen', exact: true }).click();
@@ -151,4 +155,50 @@ test('public information pages remain reachable without a session', async ({ pag
       .toBeLessThanOrEqual(1);
   }
   await page.screenshot({ path: testInfo.outputPath('terms-mobile.png'), fullPage: true });
+});
+
+test('administrator sees SMTP acceptance and can retry a failed invitation send', async ({ page, data }) => {
+  data.user.isAdmin = true;
+  await page.route('**/api/pholy/auth/status', (route) =>
+    route.fulfill({ json: { mailEnabled: true, passwordLoginEnabled: true } }),
+  );
+  const invitation = {
+    id: '00000000-0000-4000-8000-000000000009',
+    ...preview,
+    createdAt: new Date().toISOString(),
+    usedAt: null,
+    revokedAt: null,
+    mailStatus: 'accepted',
+    mailAcceptedAt: new Date().toISOString(),
+  };
+  let items: unknown[] = [];
+  let created: unknown;
+  let sends = 0;
+  await page.route('**/api/pholy/invitations**', async (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: items });
+    if (route.request().url().endsWith('/send')) {
+      sends++;
+      invitation.mailStatus = 'failed';
+      invitation.mailAcceptedAt = '';
+      return route.fulfill({
+        json: { ...invitation, url: 'https://pholy.de/auth/register#invitation=' + 'b'.repeat(43) },
+      });
+    }
+    created = route.request().postDataJSON();
+    items = [invitation];
+    await route.fulfill({ json: { ...invitation, url: 'https://pholy.de/auth/register#invitation=' + token } });
+  });
+  await page.goto(Route.invitations());
+  await page.locator('input[type=email]').fill(preview.email);
+  await page.getByRole('checkbox', { name: 'Einladung per E-Mail senden' }).check();
+  await page.getByRole('button', { name: 'Erstellen und senden', exact: true }).click();
+  await expect(page.locator('.mail-status')).toContainText('Vom Mailserver angenommen');
+  expect(created).toEqual({ email: preview.email, quotaGiB: 100, sendEmail: true });
+  await page.getByRole('button', { name: 'Erneut senden', exact: true }).click();
+  await expect(page.locator('.mail-status')).toHaveText('Versand fehlgeschlagen');
+  await expect(page.locator('input[readonly]')).toHaveValue(
+    'https://pholy.de/auth/register#invitation=' + 'b'.repeat(43),
+  );
+  await expect(page.getByRole('button', { name: 'E-Mail senden', exact: true })).toBeVisible();
+  expect(sends).toBe(1);
 });

@@ -191,6 +191,9 @@
         <Button type="submit" size="large" shape="rectangle" fullWidth {loading} class="pholy-login-submit light"
           >{$t('to_login')}</Button
         >
+        <a href={Route.forgotPassword()} class="text-center text-sm underline underline-offset-4"
+          >{$t('pholy_auth.forgot_link')}</a
+        >
       </form>
     {/if}
 

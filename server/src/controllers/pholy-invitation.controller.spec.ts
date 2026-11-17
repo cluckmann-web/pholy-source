@@ -7,7 +7,7 @@ import { controllerSetup, type ControllerContext } from 'test/utils.js';
 
 describe(PholyInvitationController.name, () => {
   let ctx: ControllerContext;
-  const service = { list: vi.fn(), create: vi.fn(), revoke: vi.fn(), preview: vi.fn(), accept: vi.fn() };
+  const service = { list: vi.fn(), create: vi.fn(), revoke: vi.fn(), preview: vi.fn(), accept: vi.fn(), send: vi.fn() };
   beforeAll(async () => {
     ctx = await controllerSetup(PholyInvitationController, [{ provide: PholyInvitationService, useValue: service }]);
     return () => ctx.close();
@@ -25,6 +25,14 @@ describe(PholyInvitationController.name, () => {
     expect(service.list).not.toHaveBeenCalled();
     expect(service.revoke).not.toHaveBeenCalled();
   });
+  it('protects the resend endpoint with administrator authentication', async () => {
+    ctx.authenticate.mockRejectedValue(new UnauthorizedException());
+    const result = await request(ctx.getHttpServer()).post(
+      '/pholy/invitations/00000000-0000-4000-8000-000000000001/send',
+    );
+    expect(result.status).toBe(401);
+    expect(service.send).not.toHaveBeenCalled();
+  });
   it('requires admin authentication policy', async () => {
     ctx.authenticate.mockRejectedValue(new ForbiddenException());
     const result = await request(ctx.getHttpServer()).get('/pholy/invitations');
@@ -32,14 +40,12 @@ describe(PholyInvitationController.name, () => {
     expect(ctx.authenticate).toHaveBeenCalled();
   });
   it('rejects registration without a valid-shaped token', async () => {
-    const result = await request(ctx.getHttpServer())
-      .post('/pholy/invitations/accept')
-      .send({
-        name: 'Person',
-        password: 'long-enough-password',
-        termsAccepted: true,
-        termsVersion: PHOLY_TERMS_VERSION,
-      });
+    const result = await request(ctx.getHttpServer()).post('/pholy/invitations/accept').send({
+      name: 'Person',
+      password: 'long-enough-password',
+      termsAccepted: true,
+      termsVersion: PHOLY_TERMS_VERSION,
+    });
     expect(result.status).toBe(400);
     expect(service.accept).not.toHaveBeenCalled();
   });

@@ -11,6 +11,7 @@ import { EventRepository } from 'src/repositories/event.repository.js';
 import { PholyInvitationRepository } from 'src/repositories/pholy-invitation.repository.js';
 import { UserRepository } from 'src/repositories/user.repository.js';
 import { PholyInvitationService } from 'src/services/pholy-invitation.service.js';
+import { PholyMailService } from 'src/services/pholy-mail.service.js';
 
 describe(PholyInvitationService.name, () => {
   const admin = { user: { id: '00000000-0000-4000-8000-000000000001', isAdmin: true } } as AuthDto;
@@ -23,10 +24,19 @@ describe(PholyInvitationService.name, () => {
     termsAccepted: true as const,
     termsVersion: PHOLY_TERMS_VERSION,
   };
-  const repo = { create: vi.fn(), list: vi.fn(), revoke: vi.fn(), findValid: vi.fn(), accept: vi.fn() };
+  const repo = {
+    create: vi.fn(),
+    list: vi.fn(),
+    revoke: vi.fn(),
+    findValid: vi.fn(),
+    accept: vi.fn(),
+    rotateForMail: vi.fn(),
+    finishMail: vi.fn(),
+  };
   const crypto = { hashSha256: (value: string) => createHash('sha256').update(value).digest(), hashBcrypt: vi.fn() };
   const users = { get: vi.fn() };
   const events = { emit: vi.fn() };
+  const mail = { send: vi.fn() };
   let service: PholyInvitationService;
   beforeEach(() => {
     vi.clearAllMocks();
@@ -35,13 +45,14 @@ describe(PholyInvitationService.name, () => {
       crypto as unknown as CryptoRepository,
       users as unknown as UserRepository,
       events as unknown as EventRepository,
+      mail as unknown as PholyMailService,
     );
   });
   it('blocks non-admin invitation management', async () => {
     await expect(service.list(member)).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(service.create(member, { email: 'person@example.test', quotaGiB: 100 })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.create(member, { email: 'person@example.test', quotaGiB: 100, sendEmail: false }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(service.revoke(member, admin.user.id)).rejects.toBeInstanceOf(ForbiddenException);
     expect(repo.create).not.toHaveBeenCalled();
     expect(repo.list).not.toHaveBeenCalled();
@@ -50,7 +61,7 @@ describe(PholyInvitationService.name, () => {
   it('issues a seven-day email-bound link and stores only its hash', async () => {
     repo.create.mockResolvedValue({ id: 'invitation' });
     const start = Date.now();
-    const result = await service.create(admin, { email: 'person@example.test', quotaGiB: 100 });
+    const result = await service.create(admin, { email: 'person@example.test', quotaGiB: 100, sendEmail: false });
     const raw = new URLSearchParams(new URL(result.url).hash.slice(1)).get('invitation')!;
     expect(raw).toMatch(/^[\w-]{43}$/);
     expect(repo.create).toHaveBeenCalledWith(
@@ -64,6 +75,25 @@ describe(PholyInvitationService.name, () => {
     const saved = repo.create.mock.calls[0][0];
     expect(saved.expiresAt.getTime()).toBeGreaterThanOrEqual(start + 7 * 86_400_000);
     expect(saved).not.toHaveProperty('token');
+  });
+  it('records SMTP acceptance without claiming inbox delivery and preserves the copyable link', async () => {
+    repo.create.mockResolvedValue({ id: 'invitation', email: 'person@example.test' });
+    mail.send.mockResolvedValue({ status: 'accepted', messageId: 'synthetic' });
+    repo.finishMail.mockResolvedValue({ id: 'invitation', mailStatus: 'accepted' });
+    const result = await service.create(admin, { email: 'person@example.test', quotaGiB: 100, sendEmail: true });
+    expect(result).toMatchObject({ mailStatus: 'accepted', url: expect.stringContaining('#invitation=') });
+    expect(mail.send).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'person@example.test', actionUrl: result.url }),
+    );
+    expect(repo.finishMail).toHaveBeenCalledWith('invitation', expect.any(Buffer), 'accepted');
+  });
+  it('resends through token rotation and records failure without a false success state', async () => {
+    repo.rotateForMail.mockResolvedValue({ id: 'invitation', email: 'person@example.test' });
+    mail.send.mockResolvedValue({ status: 'failed' });
+    repo.finishMail.mockResolvedValue({ id: 'invitation', mailStatus: 'failed' });
+    expect(await service.send(admin, 'invitation')).toMatchObject({ mailStatus: 'failed' });
+    expect(repo.rotateForMail).toHaveBeenCalledWith('invitation', expect.any(Buffer));
+    await expect(service.send(member, 'invitation')).rejects.toBeInstanceOf(ForbiddenException);
   });
   it('does not hash a password for an invalid invitation', async () => {
     repo.findValid.mockResolvedValue(undefined);
@@ -107,6 +137,7 @@ describe(PholyInvitationService.name, () => {
     expect(PholyInvitationCreateDto.schema.parse({ email: 'Person@EXAMPLE.test' })).toEqual({
       email: 'person@example.test',
       quotaGiB: null,
+      sendEmail: false,
     });
   });
 });

@@ -104,10 +104,10 @@ export class EmailRepository {
     this.logger.setContext(EmailRepository.name);
   }
 
-  verifySmtp(options: SmtpOptions): Promise<true> {
+  async verifySmtp(options: SmtpOptions): Promise<true> {
     const transport = this.createTransport(options);
     try {
-      return transport.verify();
+      return await transport.verify();
     } finally {
       transport.close();
     }
@@ -120,7 +120,16 @@ export class EmailRepository {
     return { html, text };
   }
 
-  sendEmail({ to, from, subject, html, text, smtp, imageAttachments }: SendEmailOptions): Promise<SendEmailResponse> {
+  async sendEmail({
+    to,
+    from,
+    replyTo,
+    subject,
+    html,
+    text,
+    smtp,
+    imageAttachments,
+  }: SendEmailOptions): Promise<SendEmailResponse> {
     this.logger.debug(`Sending email to ${to} with subject: ${subject}`);
     const transport = this.createTransport(smtp);
 
@@ -131,7 +140,7 @@ export class EmailRepository {
     }));
 
     try {
-      return transport.sendMail({ to, from, subject, html, text, attachments });
+      return await transport.sendMail({ to, from, replyTo, subject, html, text, attachments });
     } finally {
       transport.close();
     }
@@ -171,6 +180,8 @@ export class EmailRepository {
             }
           : undefined,
       connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 15_000,
     });
   }
 }

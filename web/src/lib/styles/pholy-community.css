@@ -1,0 +1,309 @@
+.pholy-community {
+  max-width: 1160px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.25rem;
+  color: var(--color-immich-fg, #26382e);
+}
+.pholy-community * {
+  box-sizing: border-box;
+}
+.pholy-community .lead {
+  max-width: 760px;
+  color: #627369;
+  line-height: 1.65;
+  margin-bottom: 1.5rem;
+}
+.pholy-community h1 {
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.pholy-community h2 {
+  font-size: 1.15rem;
+  font-weight: 650;
+  margin: 0 0 0.8rem;
+}
+.pholy-community p {
+  overflow-wrap: anywhere;
+}
+.pholy-community button,
+.pholy-community .button-link {
+  background: #245641;
+  color: #fff;
+  padding: 0.65rem 1rem;
+  border: 1px solid #245641;
+  border-radius: 0;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  text-align: center;
+}
+.pholy-community button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pholy-community button.secondary {
+  background: transparent;
+  color: inherit;
+  border-color: #a7b5ab;
+}
+.pholy-community button:focus-visible,
+.pholy-community a:focus-visible,
+.pholy-community input:focus-visible,
+.pholy-community textarea:focus-visible,
+.pholy-community select:focus-visible {
+  outline: 3px solid #6eaa8c;
+  outline-offset: 3px;
+}
+.pholy-community a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pholy-community input:not([type='checkbox']),
+.pholy-community textarea,
+.pholy-community select {
+  width: 100%;
+  border: 1px solid #a7b5ab;
+  background: transparent;
+  color: inherit;
+  padding: 0.7rem;
+  border-radius: 0;
+  min-height: 44px;
+}
+.pholy-community input[type='checkbox'] {
+  accent-color: #245641;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.pholy-community .community-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.pholy-community .community-tabs button {
+  background: transparent;
+  color: inherit;
+  border-color: #c9d3cc;
+}
+.pholy-community .community-tabs button[aria-pressed='true'] {
+  color: #fff;
+  background: #245641;
+  border-color: #245641;
+}
+.pholy-community .community-card {
+  border: 1px solid #d2dad4;
+  padding: 1.4rem;
+  margin-bottom: 1.25rem;
+  min-width: 0;
+}
+.pholy-community .profile-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.pholy-community .profile-fields label {
+  font-weight: 600;
+}
+.pholy-community .muted {
+  color: #66766b;
+  font-size: 0.88rem;
+}
+.pholy-community .notice {
+  border-left: 3px solid #73937f;
+  background: #edf3ee;
+  color: #244f36;
+  padding: 1rem;
+  margin: 0.75rem 0;
+  line-height: 1.6;
+}
+.pholy-community .notice.error {
+  border-color: #b64437;
+  background: #fff0ed;
+  color: #842e24;
+}
+.pholy-community .notice.success {
+  border-color: #3b8058;
+}
+.pholy-community .check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  overflow-wrap: anywhere;
+}
+.pholy-community .community-status,
+.pholy-community .community-actions,
+.pholy-community .section-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+.pholy-community .section-heading h2 {
+  margin: 0;
+}
+.pholy-community .picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+.pholy-community .picker-photo {
+  display: block;
+  border: 2px solid transparent;
+  background: #edf1ed;
+  cursor: pointer;
+  min-width: 0;
+}
+.pholy-community .picker-photo.chosen {
+  border-color: #245641;
+}
+.pholy-community .picker-photo img {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+}
+.pholy-community .picker-photo span {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem;
+  color: #273d2d;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.pholy-community .picker-photo small {
+  display: block;
+  padding: 0.3rem;
+  color: #842e24;
+}
+.pholy-community .selected-list {
+  margin: 1rem 0;
+}
+.pholy-community .save-bar {
+  padding: 0.6rem 0 1.5rem;
+}
+.pholy-community .profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 1.25rem;
+}
+.pholy-community .profile-card {
+  text-decoration: none;
+  display: block;
+  margin: 0;
+}
+.pholy-community .profile-card:hover {
+  border-color: #245641;
+}
+.pholy-community .profile-initial {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  color: #245641;
+  background: #e5eee7;
+  font-size: 1.6rem;
+  margin-bottom: 1rem;
+}
+.pholy-community .public-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 0 2.5rem;
+}
+.pholy-community .brand {
+  font-weight: 800;
+  letter-spacing: -0.07em;
+  font-size: 1.75rem;
+  text-decoration: none;
+}
+.pholy-community .public-intro {
+  max-width: 760px;
+  margin: 0 auto 2rem;
+  text-align: center;
+}
+.pholy-community .public-intro .bio {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  margin: 1rem 0;
+}
+.pholy-community .public-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.25rem;
+}
+.pholy-community .public-gallery figure {
+  margin: 0;
+  min-width: 0;
+}
+.pholy-community .public-gallery img {
+  width: 100%;
+  height: 320px;
+  object-fit: contain;
+  background: #edf1ed;
+}
+.pholy-community .public-gallery figcaption {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.4rem 0;
+}
+.pholy-community .report-form {
+  max-width: 700px;
+  margin: 1.5rem auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.pholy-community .report-details {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+.pholy-community .report-status {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+  background: #edf1ed;
+  color: #245641;
+}
+.pholy-community .report-status.open {
+  background: #fff0cc;
+  color: #775c14;
+}
+.dark .pholy-community {
+  color: #e4eae5;
+}
+@media (prefers-color-scheme: dark) {
+  .dark .pholy-community .lead,
+  .dark .pholy-community .muted {
+    color: #bac7bf;
+  }
+}
+@media (max-width: 480px) {
+  .pholy-community {
+    padding: 1rem 0.65rem;
+  }
+  .pholy-community .community-card {
+    padding: 1rem;
+  }
+  .pholy-community .picker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+  .pholy-community .public-gallery,
+  .pholy-community .profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pholy-community .community-tabs button {
+    flex: 1 1 auto;
+    padding: 0.6rem;
+  }
+  .pholy-community .public-gallery img {
+    height: 260px;
+  }
+}

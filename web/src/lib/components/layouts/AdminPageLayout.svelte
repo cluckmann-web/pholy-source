@@ -12,7 +12,9 @@
     mdiAccountMultipleOutline,
     mdiBookshelf,
     mdiCog,
+    mdiLifebuoy,
     mdiServer,
+    mdiShieldCheckOutline,
     mdiTrayFull,
     mdiViewDashboardOutline,
     mdiWrench,
@@ -49,6 +51,8 @@
         icon={mdiAccountMultipleOutline}
       />
       <NavbarItem title={$t('users')} href={Route.users()} icon={mdiAccountMultipleOutline} />
+      <NavbarItem title={$t('pholy_nav_support')} href={Route.adminSupport()} icon={mdiLifebuoy} />
+      <NavbarItem title={$t('pholy_nav_moderation')} href={Route.adminCommunity()} icon={mdiShieldCheckOutline} />
       <NavbarItem title={$t('external_libraries')} href={Route.libraries()} icon={mdiBookshelf} />
       <NavbarItem title={$t('admin.queues')} href={Route.queues()} icon={mdiTrayFull} />
       <NavbarItem title={$t('settings')} href={Route.systemSettings()} icon={mdiCog} />

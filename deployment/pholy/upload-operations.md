@@ -1,6 +1,6 @@
 # PHOLY upload operations
 
-Release `3.4.1-pholy.12` keeps the existing Immich API and mobile app. The web
+Release `3.4.1-pholy.13` keeps the existing Immich API and mobile app. The web
 client adds an authenticated resumable transport; shared-link uploads keep the
 existing upload endpoint.
 

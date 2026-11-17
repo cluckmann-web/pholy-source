@@ -110,6 +110,11 @@ export class WebsocketRepository implements OnGatewayConnection, OnGatewayDiscon
     this.server?.to(room).emit(event, ...data);
   }
 
+  disconnectSession(sessionId: string) {
+    // The Redis adapter applies this to every connection in the revoked session room.
+    this.server?.in(sessionId).disconnectSockets(true);
+  }
+
   clientBroadcast<T extends keyof ClientEventMap>(event: T, ...data: ClientEventMap[T]) {
     this.server?.emit(event, ...data);
   }

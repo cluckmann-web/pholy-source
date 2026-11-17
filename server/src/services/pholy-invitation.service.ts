@@ -18,6 +18,7 @@ import { CryptoRepository } from 'src/repositories/crypto.repository.js';
 import { EventRepository } from 'src/repositories/event.repository.js';
 import { PHOLY_INVITATION_INVALID, PholyInvitationRepository } from 'src/repositories/pholy-invitation.repository.js';
 import { UserRepository } from 'src/repositories/user.repository.js';
+import { PholyMailService } from 'src/services/pholy-mail.service.js';
 
 @Injectable()
 export class PholyInvitationService {
@@ -27,6 +28,7 @@ export class PholyInvitationService {
     private crypto: CryptoRepository,
     private users: UserRepository,
     private events: EventRepository,
+    private mail: PholyMailService,
   ) {}
 
   private requireAdmin(auth: AuthDto) {
@@ -58,9 +60,34 @@ export class PholyInvitationService {
       createdBy: auth.user.id,
       tokenHash: this.crypto.hashSha256(token),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      mailStatus: dto.sendEmail ? 'sending' : 'not_sent',
+      mailAttemptedAt: dto.sendEmail ? new Date() : null,
       quotaSizeInBytes: dto.quotaGiB === null ? null : dto.quotaGiB * 1024 ** 3,
     });
+    if (dto.sendEmail) return this.deliver(invitation, token);
     return { ...invitation, url: 'https://pholy.de/auth/register#invitation=' + token };
+  }
+
+  async send(auth: AuthDto, id: string) {
+    this.requireAdmin(auth);
+    const token = randomBytes(32).toString('base64url');
+    const invitation = await this.invitations.rotateForMail(id, this.crypto.hashSha256(token));
+    return this.deliver(invitation, token);
+  }
+
+  private async deliver(invitation: { id: string; email: string }, token: string) {
+    const url = 'https://pholy.de/auth/register#invitation=' + token;
+    const result = await this.mail.send({
+      to: invitation.email,
+      subject: 'Deine Einladung zu PHOLY',
+      title: 'Dein Platz für Erinnerungen',
+      message:
+        'Du bist zu PHOLY eingeladen. Erstelle dein kostenloses Konto über den folgenden Link. Die Einladung ist sieben Tage gültig und nur für diese E-Mail-Adresse bestimmt.\n\nNach der Registrierung kannst du auch die Immich-App für iOS oder Android nutzen. Die Serveradresse lautet https://pholy.de.',
+      actionLabel: 'Einladung annehmen',
+      actionUrl: url,
+    });
+    const updated = await this.invitations.finishMail(invitation.id, this.crypto.hashSha256(token), result.status);
+    return { ...updated, url };
   }
 
   async revoke(auth: AuthDto, id: string) {

@@ -335,7 +335,8 @@ pages preload the shared Inter font. No authentication behavior changes.
 
 PHOLY remains free. There is no public self-registration on an initialized
 server. Administrators open /admin/invitations, choose an email and optional
-quota, and copy a personal invitation URL. This action does not send email.
+quota, and copy a personal invitation URL. From .13 they may also explicitly
+send or resend the invitation by email; see platform-operations.md.
 Links expire after seven days, can be revoked, and are usable once. Reissuing
 for the same email revokes the earlier link. Store and share the returned
 URL securely; only its hash is persisted, so it cannot be retrieved again.
@@ -381,7 +382,7 @@ Verification:
 
 ## External source link (PHOLY .10)
 
-The source page links to GitHub release branch `releases/3.4.1-pholy.12`.
+The source page links to GitHub release branch `releases/3.4.1-pholy.13`.
 It has no direct archive download button. Before activating this release,
 verify that the GitHub repository and branch are readable without an account,
 and that the branch tree equals the source tree used by the native builder.
@@ -391,7 +392,7 @@ existing release branch to a different source tree.
 To build from the public repository, install the prerequisites above, then:
 
 ```sh
-git clone --branch releases/3.4.1-pholy.12 https://github.com/cluckmann-web/pholy-source.git
+git clone --branch releases/3.4.1-pholy.13 https://github.com/cluckmann-web/pholy-source.git
 cd pholy-source
 PHOLY_BUILD_USER="$(id -un)" \
 PHOLY_DOMAIN_ROOT=/absolute/path/to/pholy-rebuild \
@@ -410,3 +411,10 @@ See [upload operations](upload-operations.md) for resumable uploads, storage
 requirements, processing limits, acceptance checks and the new administration
 overview. Invitation-only registration and native mobile compatibility remain
 part of the same application.
+
+## Account, support and community (.13)
+
+Password recovery, invitation email, persistent upload history, quota warnings,
+in-app support, account export/closure and optional public galleries are documented
+in [platform-operations.md](platform-operations.md). The invitation-only free
+model and native Immich app compatibility remain in place.

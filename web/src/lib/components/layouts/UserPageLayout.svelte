@@ -3,6 +3,8 @@
 </script>
 
 <script lang="ts">
+  import AccountClosureNotice from '#lib/components/shared-components/AccountClosureNotice.svelte';
+  import PholyQuotaWarning from '#lib/components/shared-components/PholyQuotaWarning.svelte';
   import NavigationBar from '#lib/components/shared-components/navigation-bar/NavigationBar.svelte';
   import UserSidebar from '#lib/components/shared-components/side-bar/UserSidebar.svelte';
   import type { HeaderButtonActionItem } from '#lib/types.ts';
@@ -103,6 +105,8 @@
     {/if}
 
     <div class="{scrollbarClass} pholy-page-content relative min-h-0 w-full flex-1 overflow-y-auto" {...rest}>
+      <AccountClosureNotice />
+      <PholyQuotaWarning />
       {@render children?.()}
     </div>
   </main>

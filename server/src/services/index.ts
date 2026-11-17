@@ -1,3 +1,9 @@
+import { PholySupportService } from 'src/services/pholy-support.service.js';
+import { PholyMailService } from 'src/services/pholy-mail.service.js';
+import { PholyHistoryService } from 'src/services/pholy-history.service.js';
+import { PholyCommunityService } from 'src/services/pholy-community.service.js';
+import { PholyAuthService } from 'src/services/pholy-auth.service.js';
+import { PholyAccountService } from 'src/services/pholy-account.service.js';
 import { ActivityService } from 'src/services/activity.service.js';
 import { AlbumService } from 'src/services/album.service.js';
 import { ApiKeyService } from 'src/services/api-key.service.js';
@@ -57,6 +63,12 @@ import { WorkflowExecutionService } from 'src/services/workflow-execution.servic
 import { WorkflowService } from 'src/services/workflow.service.js';
 
 export const services = [
+  PholySupportService,
+  PholyMailService,
+  PholyHistoryService,
+  PholyCommunityService,
+  PholyAuthService,
+  PholyAccountService,
   PholyInvitationService,
   PholyUploadService,
   ApiKeyService,

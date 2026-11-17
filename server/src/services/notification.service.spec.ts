@@ -204,15 +204,36 @@ describe(NotificationService.name, () => {
   });
 
   describe('onSessionDeleteEvent', () => {
-    it('should send a on_session_delete client event', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('sends the logout event before forcibly disconnecting the revoked session', () => {
       vi.useFakeTimers();
       sut.onSessionDelete({ sessionId: 'id' });
       expect(mocks.websocket.clientSend).not.toHaveBeenCalled();
+      expect(mocks.websocket.disconnectSession).not.toHaveBeenCalled();
 
       vi.advanceTimersByTime(500);
 
       expect(mocks.websocket.clientSend).toHaveBeenCalledWith('on_session_delete', 'id', 'id');
+      expect(mocks.websocket.disconnectSession).toHaveBeenCalledWith('id');
+      expect(mocks.websocket.clientSend.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.websocket.disconnectSession.mock.invocationCallOrder[0],
+      );
     });
+  });
+
+  it('disconnects a revoked session even if the logout notification cannot be sent', () => {
+    vi.useFakeTimers();
+    mocks.websocket.clientSend.mockImplementation(() => {
+      throw new Error('transport failed');
+    });
+    sut.onSessionDelete({ sessionId: 'revoked-session' });
+    try {
+      expect(() => vi.advanceTimersByTime(500)).toThrow('transport failed');
+      expect(mocks.websocket.disconnectSession).toHaveBeenCalledWith('revoked-session');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe('onAssetTrash', () => {

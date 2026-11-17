@@ -29,6 +29,13 @@
 
   const handleNotificationAction = async (notification: NotificationDto) => {
     switch (notification.type) {
+      case NotificationType.SystemMessage: {
+        if (notification.data?.pholy === true && notification.data.path === '/upload-history') {
+          await goto(Route.uploadHistory());
+        }
+        break;
+      }
+
       case NotificationType.AlbumInvite:
       case NotificationType.AlbumUpdate: {
         if (!notification.data) {

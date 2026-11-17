@@ -1,3 +1,4 @@
+import type { PholyHistoryAttempt } from '#lib/queries/pholy-history.query.ts';
 import { Route } from '#lib/route.ts';
 import { factory } from '#test/common/factories.ts';
 import { expect, test } from '#test/medium/fixtures.ts';
@@ -13,11 +14,26 @@ const fixture = (name: string) => ({ name, mimeType: 'image/png', buffer: png })
 const assetsPattern = '**/api/assets';
 const uploadsPattern = '**/api/pholy/uploads/**';
 const storageKey = 'pholy-upload-sessions-v1';
+const historyPattern = '**/api/pholy/history/attempts';
+let historyReports: PholyHistoryAttempt[] = [];
+
+test.beforeEach(async ({ page }) => {
+  historyReports = [];
+  await page.route(historyPattern, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    const body = route.request().postDataJSON() as PholyHistoryAttempt;
+    expect(body.id).toMatch(/^[a-f0-9-]{36}$/);
+    expect(['failed', 'cancelled', 'duplicate', 'accepted']).toContain(body.status);
+    historyReports.push(body);
+    await route.fulfill({ status: 204 });
+  });
+});
 
 test.use({ language: 'de' });
 test.setTimeout(60_000);
 
 test.afterEach(async ({ page }) => {
+  await page.unroute(historyPattern);
   await page.unroute(assetsPattern);
   await page.unroute(uploadsPattern);
   if (page.url().startsWith('http')) {
@@ -95,6 +111,9 @@ for (const width of [1440, 390, 320]) {
       await expect(panel.locator('[data-state="paused"]')).toHaveCount(3);
       await panel.getByRole('button', { name: `Upload von ${names[2]} abbrechen`, exact: true }).click();
       await expect(panel.locator('[data-state="cancelled"]')).toHaveCount(1);
+      await expect
+        .poll(() => historyReports.map(({ status, fileName }) => ({ status, fileName })))
+        .toEqual([{ status: 'cancelled', fileName: names[2] }]);
       await expectPanelFits(page);
       await page.screenshot({ path: testInfo.outputPath(`uploads-paused-${width}.png`) });
 
@@ -159,6 +178,9 @@ test('duplicates keep an accessible original link without transferring the file 
     Route.viewAsset(asset),
   );
   expect(transfers).toBe(0);
+  await expect
+    .poll(() => historyReports.map(({ status, assetId }) => ({ status, assetId })))
+    .toEqual([{ status: 'duplicate', assetId: asset.id }]);
   await expect(panel).toHaveCount(0);
 });
 
@@ -189,11 +211,14 @@ test('quota failures remain actionable and retry without duplicating the queue e
   ).toBeVisible();
   expect(transfers).toBe(0);
   expect(logger.error).toHaveBeenCalledWith(/\[handleError\].*Speicher/);
+  await expect.poll(() => historyReports.map(({ status }) => status)).toEqual(['failed']);
   data.user.quotaSizeInBytes = 1024 * 1024;
   await panel.getByRole('button', { name: 'Fehlgeschlagene erneut versuchen', exact: true }).click();
   await expect(panel.locator('[data-state="ready"]')).toHaveCount(1);
   await expect(panel.getByTestId('upload-file')).toHaveCount(1);
   expect(transfers).toBe(1);
+  await expect.poll(() => historyReports.map(({ status }) => status)).toEqual(['failed', 'accepted']);
+  expect(historyReports[0].id).toBe(historyReports[1].id);
   await expect(panel.getByRole('button', { name: 'Fehlgeschlagene erneut versuchen', exact: true })).toHaveCount(0);
 });
 
@@ -247,4 +272,7 @@ test('reloaded uploads require reselecting the original file and can be discarde
     .click();
   await expect(panel).toHaveCount(0);
   expect(requests).toEqual([`DELETE /api/pholy/uploads/sessions/${record.id}`]);
+  await expect
+    .poll(() => historyReports.map(({ status, id }) => ({ status, id })))
+    .toEqual([{ status: 'cancelled', id: record.id }]);
 });

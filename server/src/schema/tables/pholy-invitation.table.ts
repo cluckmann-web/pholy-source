@@ -32,6 +32,12 @@ export class PholyInvitationTable {
   acceptedUserId!: string | null;
   @Column({ type: 'bigint', nullable: true })
   quotaSizeInBytes!: ColumnType<number> | null;
+  @Column({ default: 'not_sent' })
+  mailStatus!: Generated<string>;
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  mailAttemptedAt!: Timestamp | null;
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  mailAcceptedAt!: Timestamp | null;
   @Column({ nullable: true })
   termsVersion!: string | null;
 }

@@ -48,7 +48,7 @@ export class Dispatcher {
   private readonly handlers = new Map<string, Handler<OperationId>>();
   private readonly spies = new Map<string, OperationSpy<OperationId>>();
 
-  constructor(data: MockData) {
+  constructor(private readonly data: MockData) {
     this.on(createHandlers(data));
   }
 
@@ -97,6 +97,21 @@ export class Dispatcher {
   }
 
   async dispatch(method: string, url: URL, body: unknown): Promise<Response> {
+    // PHOLY's session-only account banner is intentionally outside the upstream SDK.
+    // Feature tests override this endpoint to exercise closure and export states.
+    if (method === 'GET' && url.pathname === '/api/pholy/account') {
+      return {
+        status: 200,
+        json: {
+          email: this.data.user.email,
+          isAdmin: this.data.user.isAdmin,
+          hasPassword: true,
+          closeRequestedAt: null,
+          closeAfter: null,
+          exportExpiresAt: null,
+        },
+      };
+    }
     const match = matchOperation(method, url.pathname);
     if (!match) {
       this.unhandled.push(`${method} ${url.pathname}${url.search} (no matching OpenAPI operation)`);

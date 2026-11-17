@@ -5,7 +5,7 @@
   import type { Snippet } from 'svelte';
   import { t } from 'svelte-i18n';
 
-  let { children }: { children: Snippet } = $props();
+  let { children, title, intro }: { children: Snippet; title?: string; intro?: string } = $props();
 </script>
 
 <svelte:head>
@@ -43,8 +43,10 @@
     <section class="form-column" aria-labelledby="login-title">
       <div class="form-inner">
         <p class="eyebrow"><span aria-hidden="true"></span>{$t('pholy_login.eyebrow')}</p>
-        <h1 id="login-title">{$t('pholy_login.welcome')}<br /><em>{$t('pholy_login.welcome_em')}</em></h1>
-        <p class="intro">{$t('pholy_login.intro')}</p>
+        <h1 id="login-title">
+          {#if title}{title}{:else}{$t('pholy_login.welcome')}<br /><em>{$t('pholy_login.welcome_em')}</em>{/if}
+        </h1>
+        <p class="intro">{intro ?? $t('pholy_login.intro')}</p>
         <div class="login-controls">{@render children()}</div>
         <p class="account-note">{$t('pholy_login.account_note')}</p>
       </div>

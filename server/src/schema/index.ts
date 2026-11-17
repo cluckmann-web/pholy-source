@@ -1,3 +1,8 @@
+import { PholyUploadHistoryTable, PholyAlertStateTable } from 'src/schema/tables/pholy-upload-history.table.js';
+import { PholySupportTicketTable, PholySupportMessageTable } from 'src/schema/tables/pholy-support.table.js';
+import { PholyPasswordResetTable } from 'src/schema/tables/pholy-password-reset.table.js';
+import { PholyCommunityProfileTable, PholyCommunityAssetTable, PholyCommunityFollowTable, PholyCommunityReportTable } from 'src/schema/tables/pholy-community.table.js';
+import { PholyAccountStateTable } from 'src/schema/tables/pholy-account-state.table.js';
 import { Database, Extensions, Generated, Int8 } from '@immich/sql-tools';
 import {
   album_user_role_enum,
@@ -105,6 +110,16 @@ import { WorkflowTable } from 'src/schema/tables/workflow.table.js';
 @Database({ name: 'immich' })
 export class ImmichDatabase {
   tables = [
+    PholyUploadHistoryTable,
+    PholyAlertStateTable,
+    PholySupportTicketTable,
+    PholySupportMessageTable,
+    PholyPasswordResetTable,
+    PholyCommunityProfileTable,
+    PholyCommunityAssetTable,
+    PholyCommunityFollowTable,
+    PholyCommunityReportTable,
+    PholyAccountStateTable,
     PholyInvitationTable,
     ActivityTable,
     AlbumAssetTable,
@@ -214,6 +229,16 @@ export interface Migrations {
 }
 
 export interface DB {
+  pholy_upload_history: PholyUploadHistoryTable;
+  pholy_alert_state: PholyAlertStateTable;
+  pholy_support_ticket: PholySupportTicketTable;
+  pholy_support_message: PholySupportMessageTable;
+  pholy_password_reset: PholyPasswordResetTable;
+  pholy_community_profile: PholyCommunityProfileTable;
+  pholy_community_asset: PholyCommunityAssetTable;
+  pholy_community_follow: PholyCommunityFollowTable;
+  pholy_community_report: PholyCommunityReportTable;
+  pholy_account_state: PholyAccountStateTable;
   pholy_invitation: PholyInvitationTable;
   kysely_migrations: { timestamp: string; name: string };
 

@@ -267,8 +267,15 @@ export class NotificationService extends BaseService {
 
   @OnEvent({ name: 'SessionDelete' })
   onSessionDelete({ sessionId }: ArgOf<'SessionDelete'>) {
-    // after the response is sent
-    setTimeout(() => this.websocketRepository.clientSend('on_session_delete', sessionId, sessionId), 500);
+    // Let the HTTP response and logout event leave before closing the revoked transport.
+    setTimeout(() => {
+      try {
+        this.websocketRepository.clientSend('on_session_delete', sessionId, sessionId);
+      } finally {
+        // Revocation must not depend on a cooperating client handling the event.
+        this.websocketRepository.disconnectSession(sessionId);
+      }
+    }, 500);
   }
 
   async sendTestEmail(id: string, dto: SystemConfigSmtpDto, tempTemplate?: string) {

@@ -9,6 +9,9 @@ export type PholyInvitation = {
   usedAt: string | null;
   revokedAt: string | null;
   quotaSizeInBytes: number | null;
+  mailStatus: 'not_sent' | 'sending' | 'accepted' | 'failed' | 'disabled';
+  mailAttemptedAt: string | null;
+  mailAcceptedAt: string | null;
 };
 export type PholyInvitationPreview = Pick<PholyInvitation, 'email' | 'expiresAt' | 'quotaSizeInBytes'> & {
   termsVersion: string;
@@ -41,7 +44,13 @@ export const getPholyInvitationsQuery = () =>
 const invalidate = () => queryClient.invalidateQueries({ queryKey: KEY });
 export const createPholyInvitationMutation = () =>
   asMutation(
-    (body: { email: string; quotaGiB: number | null }) => request<PholyInvitation & { url: string }>('', 'POST', body),
+    (body: { email: string; quotaGiB: number | null; sendEmail?: boolean }) =>
+      request<PholyInvitation & { url: string }>('', 'POST', body),
+    { onSuccess: invalidate, meta: { error: { toast: false } } },
+  );
+export const sendPholyInvitationMutation = () =>
+  asMutation(
+    (id: string) => request<PholyInvitation & { url: string }>('/' + encodeURIComponent(id) + '/send', 'POST'),
     { onSuccess: invalidate, meta: { error: { toast: false } } },
   );
 export const revokePholyInvitationMutation = () =>

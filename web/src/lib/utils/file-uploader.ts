@@ -248,6 +248,20 @@ async function deleteResumableUpload(id: string) {
         throw error;
       }
     }
+    // Existing queue entries already record their cancellation; a discarded reload-only session has no row.
+    if (
+      get(uploadAssetsStore).every(
+        (item) =>
+          !(
+            item.state === UploadState.CANCELLED &&
+            item.file.name === record.fileName &&
+            item.file.size === record.fileSize &&
+            item.file.lastModified === record.lastModified
+          ),
+      )
+    ) {
+      uploadManager.recordDiscardedUpload(record);
+    }
     uploadManager.forgetUpload(id);
   }
 }

@@ -32,6 +32,14 @@ export class PholyInvitationController {
     return this.service.create(auth, dto);
   }
 
+  @Post(':id/send')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @Authenticated({ admin: true, permission: Permission.AdminUserCreate })
+  send(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto) {
+    return this.service.send(auth, id);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Authenticated({ admin: true, permission: Permission.AdminUserDelete })
