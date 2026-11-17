@@ -30,6 +30,7 @@
     mdiPlus,
   } from '@mdi/js';
   import { t } from 'svelte-i18n';
+  import { get } from 'svelte/store';
   import UploadAssetPreview from './UploadAssetPreview.svelte';
 
   let showDetail = $state(false);
@@ -52,6 +53,7 @@
     UploadState.DUPLICATED,
     UploadState.CANCELLED,
   ]);
+  const successfulStates = new Set([UploadState.DONE, UploadState.UPLOADED, UploadState.DUPLICATED]);
   const transferring = $derived(
     $uploadAssetsStore.filter((item) => item.state !== undefined && transferStates.has(item.state)),
   );
@@ -122,6 +124,31 @@
     if (visible) {
       showDetail = true;
     }
+  });
+
+  // Leave the final result briefly visible, then dismiss only successful rows.
+  // New files or unresolved entries cancel the timer, including reload recovery.
+  $effect(() => {
+    const items = $uploadAssetsStore;
+    if (
+      items.length === 0 ||
+      items.some((item) => !successfulStates.has(item.state!)) ||
+      uploadManager.resumableUploads.length > 0
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const current = get(uploadAssetsStore);
+      if (current.some((item) => !successfulStates.has(item.state!)) || uploadManager.resumableUploads.length > 0) {
+        return;
+      }
+      for (const item of current) {
+        dismissUpload(item.id);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
   });
 
   $effect(() => {

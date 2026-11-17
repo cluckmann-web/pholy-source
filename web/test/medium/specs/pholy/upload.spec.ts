@@ -120,7 +120,8 @@ for (const width of [1440, 390, 320]) {
       expect(requests).not.toContain(names[2]);
       await expectPanelFits(page);
       await page.screenshot({ path: testInfo.outputPath(`uploads-ready-${width}.png`) });
-      await panel.getByRole('button', { name: 'Erledigte ausblenden', exact: true }).click();
+      // Cancelled files stay actionable. Once dismissed, the successful batch closes itself.
+      await panel.getByRole('button', { name: `${names[2]} aus dieser Liste ausblenden`, exact: true }).click();
       await expect(panel).toHaveCount(0);
     } finally {
       releaseUploads();
@@ -158,9 +159,6 @@ test('duplicates keep an accessible original link without transferring the file 
     Route.viewAsset(asset),
   );
   expect(transfers).toBe(0);
-  await panel
-    .getByRole('button', { name: `${asset.originalFileName} aus dieser Liste ausblenden`, exact: true })
-    .click();
   await expect(panel).toHaveCount(0);
 });
 

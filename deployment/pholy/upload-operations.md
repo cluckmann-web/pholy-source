@@ -1,6 +1,6 @@
 # PHOLY upload operations
 
-Release `3.4.1-pholy.11` keeps the existing Immich API and mobile app. The web
+Release `3.4.1-pholy.12` keeps the existing Immich API and mobile app. The web
 client adds an authenticated resumable transport; shared-link uploads keep the
 existing upload endpoint.
 
@@ -17,6 +17,8 @@ existing upload endpoint.
   continue uploading a closed tab's files. The user must reselect the original
   file; matching metadata and checksum protect against selecting a different
   file. A missing/expired session requires a fresh transfer.
+- A fully successful batch closes automatically after two seconds. Errors,
+  cancelled files and resumable sessions stay visible until resolved or dismissed.
 - Completed files are distinct from files still awaiting a server preview.
   Search indexing, face recognition, OCR, and video conversion can continue
   after the first preview is ready.
