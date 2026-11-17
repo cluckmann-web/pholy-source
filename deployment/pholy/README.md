@@ -224,8 +224,12 @@ timeouts. The template exposes only the server; PostgreSQL, Redis and ML
 are not proxied.
 
 `/source` and `/source/` serve the public PHOLY source information page,
-with its stylesheet at `/source/source.css`.
-`/source/pholy-source.tar.gz` serves the exact release's source archive;
+with its stylesheet at `/source/source.css`. The page links to the complete
+versioned source on GitHub, rather than offering a direct download on PHOLY.
+The public GitHub release branch is recorded in `PHOLY-RELEASE.json`.
+
+For compatibility with the existing verified import tooling,
+`/source/pholy-source.tar.gz` still serves the exact release's source archive;
 `/source/pholy-source.tar.gz.sha256` serves its checksum, and
 `/source/LICENSE.txt` serves the AGPL license. The source archive contains a Git export of
 the committed PHOLY tree, including the AGPL license, modifications, build
@@ -374,3 +378,28 @@ Verification:
 - The new migration adds only pholy_invitation and its foreign keys/indexes.
   Existing user/media tables are not rewritten. Verify the additive migration
   before deployment and keep the previously built release for rollback.
+
+## External source link (PHOLY .10)
+
+The source page links to GitHub release branch `releases/3.4.1-pholy.10`.
+It has no direct archive download button. Before activating this release,
+verify that the GitHub repository and branch are readable without an account,
+and that the branch tree equals the source tree used by the native builder.
+Publish a new versioned branch for each later deployment; never repoint an
+existing release branch to a different source tree.
+
+To build from the public repository, install the prerequisites above, then:
+
+```sh
+git clone --branch releases/3.4.1-pholy.10 https://github.com/cluckmann-web/pholy-source.git
+cd pholy-source
+PHOLY_BUILD_USER="$(id -un)" \
+PHOLY_DOMAIN_ROOT=/absolute/path/to/pholy-rebuild \
+MISE_BIN=/absolute/path/to/mise \
+./deployment/pholy/build-native.sh --check
+```
+
+After preparing the documented native dependencies, use `build` instead of
+`--check` and the appropriate `PHOLY_SHARP_MODE`. Keep the checkout clean.
+The existing source archive endpoints remain compatible with the legacy
+hash-verified import workflow, but are not offered by the public page.
