@@ -1,0 +1,41 @@
+{
+  "background_color": "#fbfcfd",
+  "description": "Fotos und Videos sammeln, wiederfinden und in gemeinsamen Alben teilen.",
+  "dir": "auto",
+  "display": "standalone",
+  "icons": [
+    {
+      "purpose": "any maskable",
+      "sizes": "192x192",
+      "src": "manifest-icon-192.maskable.png",
+      "type": "image/png"
+    },
+    {
+      "purpose": "any maskable",
+      "sizes": "512x512",
+      "src": "manifest-icon-512.maskable.png",
+      "type": "image/png"
+    }
+  ],
+  "id": "/",
+  "lang": "de",
+  "name": "PHOLY – Deine Fotos. Deine Erinnerungen.",
+  "scope": "/",
+  "short_name": "PHOLY",
+  "shortcuts": [
+    {
+      "name": "Fotos",
+      "url": "/photos"
+    },
+    {
+      "name": "Alben",
+      "url": "/albums"
+    },
+    {
+      "name": "Karte",
+      "url": "/map"
+    }
+  ],
+  "start_url": "/",
+  "theme_color": "#102f33"
+}

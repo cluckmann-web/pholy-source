@@ -1,0 +1,6 @@
+PHOLY deployment additions, 15 November 2026.
+Based on Immich v3.4.1 (22b95194c80a2f2e6201093916b6c8c3d6d271dd).
+The deployment files in this directory were added for native PHOLY hosting.
+They are licensed under GNU AGPL version 3. Upstream copyright and license
+notices are retained. The ImageMagick policy is copied without alteration
+from immich-app/base-images; see imagemagick/PROVENANCE.txt.

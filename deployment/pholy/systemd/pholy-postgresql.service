@@ -1,0 +1,27 @@
+[Unit]
+Description=PHOLY private PostgreSQL 16 cluster
+After=network.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=pholy
+Group=psacln
+UMask=0077
+ExecStart=/usr/lib/postgresql/16/bin/postgres -D /var/www/vhosts/pholy.de/pholy-data/postgres -c config_file=/var/www/vhosts/pholy.de/pholy-data/config/postgresql.conf
+KillSignal=SIGINT
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/vhosts/pholy.de/pholy-data/postgres /var/www/vhosts/pholy.de/pholy-data/run-postgres
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

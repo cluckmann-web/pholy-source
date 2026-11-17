@@ -1,0 +1,9 @@
+Unmodified upstream ImageMagick security policy.
+Source: https://raw.githubusercontent.com/immich-app/base-images/e6d98454d6e6ed9a24df4ceff048590fbca30cd0/server/policy.xml
+Commit: e6d98454d6e6ed9a24df4ceff048590fbca30cd0
+SHA256: c6d937dd7bdeeb1cad8f4b9e7e3eb12d61d4c73468f02509d251025fe96f7ec3
+Retrieved: 2026-11-15
+Used only for PHOLY through MAGICK_CONFIGURE_PATH in run-server.sh.
+No shared /etc/ImageMagick policy is modified.
+This policy belongs with the native media libraries. Verify active policy with:
+MAGICK_CONFIGURE_PATH=<release>/config/imagemagick <media-prefix>/bin/magick -list policy

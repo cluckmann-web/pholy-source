@@ -1,0 +1,35 @@
+[Unit]
+Description=PHOLY photo server and background workers
+After=network-online.target pholy-postgresql.service pholy-redis.service pholy-machine-learning.service
+Requires=pholy-postgresql.service pholy-redis.service
+Wants=network-online.target pholy-machine-learning.service
+RequiresMountsFor=/mnt/familyphotos-storage/Cloud-Fotos/PHOLY
+BindsTo=mnt-familyphotos\x2dstorage.mount
+After=mnt-familyphotos\x2dstorage.mount
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=pholy
+Group=psacln
+UMask=0077
+EnvironmentFile=/var/www/vhosts/pholy.de/pholy-data/config/server.env
+WorkingDirectory=/var/www/vhosts/pholy.de/pholy-runtime/current/server
+ExecStartPre=/var/www/vhosts/pholy.de/pholy-runtime/current/bin/verify-storage.sh
+ExecStart=/var/www/vhosts/pholy.de/pholy-runtime/current/bin/run-server.sh
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=600
+TimeoutStopSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/mnt/familyphotos-storage/Cloud-Fotos/PHOLY /var/www/vhosts/pholy.de/pholy-data/cache /var/www/vhosts/pholy.de/pholy-data/tmp
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+{
+  "backup": {
+    "beta": false,
+    "database": {
+      "enabled": false
+    }
+  },
+  "machineLearning": {
+    "enabled": true,
+    "urls": [
+      "http://127.0.0.1:3008"
+    ]
+  },
+  "server": {
+    "externalDomain": "https://pholy.de"
+  },
+  "oauth": {
+    "autoRegister": false
+  }
+}

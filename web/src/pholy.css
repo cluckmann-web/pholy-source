@@ -1,0 +1,287 @@
+@layer base {
+  :root,
+  .light {
+    --pholy-surface-radius: 0px;
+    --immich-ui-primary-50: #f0f8f6;
+    --immich-ui-primary-100: #dceee9;
+    --immich-ui-primary-200: #bdddd5;
+    --immich-ui-primary-300: #92c5ba;
+    --immich-ui-primary-400: #56a394;
+    --immich-ui-primary-500: #216c63;
+    --immich-ui-primary-600: #1c5b54;
+    --immich-ui-primary-700: #194b47;
+    --immich-ui-primary-800: #163d3c;
+    --immich-ui-primary-900: #102f33;
+    --immich-ui-primary-950: #0c2427;
+    --immich-ui-light: #fbfcfd;
+    --immich-ui-dark: #18383c;
+    --immich-ui-muted: #657a7c;
+    --immich-ui-gray: #f1f5f4;
+    --immich-ui-default-border: #dce6e3;
+    --immich-primary: 33 108 99;
+    --immich-bg: 251 252 253;
+    --immich-fg: 24 56 60;
+  }
+
+  .dark {
+    --immich-ui-primary-50: #102e30;
+    --immich-ui-primary-100: #173d3e;
+    --immich-ui-primary-200: #21514e;
+    --immich-ui-primary-300: #30675f;
+    --immich-ui-primary-400: #4b887b;
+    --immich-ui-primary-500: #9bd9c8;
+    --immich-ui-primary-600: #b4e4d7;
+    --immich-ui-primary-700: #c8ece3;
+    --immich-ui-primary-800: #dcf3ec;
+    --immich-ui-primary-900: #eaf8f3;
+    --immich-ui-primary-950: #f4fcf9;
+    --immich-ui-light: #0e1f21;
+    --immich-ui-dark: #e2eeea;
+    --immich-ui-muted: #a5bcb6;
+    --immich-ui-gray: #172c2e;
+    --immich-ui-default-border: #2a4242;
+    --immich-dark-primary: 155 217 200;
+    --immich-dark-bg: 14 31 33;
+    --immich-dark-fg: 226 238 234;
+    --immich-dark-gray: 23 44 46;
+  }
+}
+
+/* Round button variants also use square corners; avatars and status dots keep their shape. */
+:where(
+  button,
+  a,
+  [role='button'],
+  input:not([type='radio']):not([type='range']),
+  select,
+  textarea,
+  [role='tab'],
+  [role='group'],
+  [role='menu'],
+  [role='listbox'],
+  [role='dialog']
+) {
+  border-radius: var(--pholy-surface-radius);
+}
+
+.immich-scrollbar::-webkit-scrollbar-track,
+.immich-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: var(--pholy-surface-radius);
+}
+
+.pholy-auth-backdrop {
+  background:
+    radial-gradient(ellipse at 10% 10%, #dceee988, transparent 50%),
+    radial-gradient(ellipse at 90% 90%, #e6eeeb99, transparent 50%), #fbfcfd;
+}
+
+.pholy-auth-card {
+  background: #ffffff;
+  box-shadow:
+    0 20px 64px #102f3309,
+    0 2px 8px #102f3305;
+}
+
+.dark .pholy-auth-backdrop {
+  background:
+    radial-gradient(ellipse at 10% 10%, #21514e44, transparent 50%),
+    radial-gradient(ellipse at 90% 90%, #173d3e44, transparent 50%), #0e1f21;
+}
+
+.dark .pholy-auth-card {
+  background: #172c2e;
+  box-shadow: 0 20px 64px #00000030;
+}
+
+/* PHOLY workspace: the existing routes and media layout stay responsible for sizing. */
+.pholy-navbar {
+  background: var(--immich-ui-light);
+}
+
+.pholy-navbar-actions {
+  flex-shrink: 0;
+}
+
+.pholy-account-button {
+  border-radius: var(--pholy-surface-radius);
+}
+
+.pholy-account-button:focus-visible {
+  outline: 2px solid var(--immich-ui-primary-500);
+  outline-offset: 3px;
+}
+
+.pholy-page-shell {
+  background: var(--immich-ui-gray);
+}
+
+.pholy-page-header {
+  min-height: 80px;
+  padding: 16px 24px;
+  background: var(--immich-ui-light);
+  border-color: var(--immich-ui-default-border);
+}
+
+.pholy-page-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+
+.pholy-page-description {
+  max-width: 70ch;
+  margin-top: 4px;
+  color: var(--immich-ui-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pholy-page-content {
+  padding: 16px 24px;
+  background: var(--immich-ui-light);
+}
+
+.pholy-photo-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 0 18px;
+}
+
+.pholy-photo-tabs {
+  display: flex;
+  min-width: 0;
+  gap: 0;
+  padding: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--immich-ui-default-border);
+  border-radius: var(--pholy-surface-radius);
+}
+
+.pholy-photo-tabs a {
+  display: inline-flex;
+  flex-shrink: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--pholy-surface-radius);
+  color: var(--immich-ui-muted);
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.pholy-photo-tabs a[aria-current='page'] {
+  color: var(--immich-ui-primary-600);
+  border-bottom-color: var(--immich-ui-primary-500);
+  background: color-mix(in srgb, var(--immich-ui-primary-500) 6%, var(--immich-ui-light));
+}
+
+.pholy-photo-tabs a:hover {
+  color: var(--immich-ui-primary-600);
+  background: color-mix(in srgb, var(--immich-ui-primary-500) 10%, var(--immich-ui-light));
+}
+
+.pholy-photo-tabs a:focus-visible {
+  outline: 2px solid var(--immich-ui-primary-500);
+  outline-offset: -2px;
+}
+
+.pholy-photo-order {
+  flex-shrink: 0;
+  color: var(--immich-ui-muted);
+  font-size: 12px;
+}
+
+.pholy-viewer-toolbar {
+  background: linear-gradient(180deg, #071719ed, #071719b3);
+  border-bottom: 1px solid #ffffff14;
+}
+
+.pholy-viewer-identity {
+  flex: 1 1 0%;
+  padding-inline-end: 16px;
+}
+
+.pholy-viewer-identity > :first-child {
+  flex-shrink: 0;
+}
+
+.pholy-viewer-name {
+  overflow: hidden;
+  color: #f4f8f7;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pholy-viewer-actions {
+  flex: 0 1 auto;
+  max-width: 80%;
+  scrollbar-width: thin;
+  scrollbar-color: #93b5ad transparent;
+}
+
+@media (max-width: 767px) {
+  .pholy-page-header {
+    min-height: 70px;
+    padding: 14px 16px;
+  }
+
+  .pholy-page-title {
+    font-size: 20px;
+  }
+
+  .pholy-page-description {
+    font-size: 12px;
+  }
+
+  .pholy-page-content {
+    padding: 12px;
+  }
+
+  .pholy-photo-tools {
+    display: block;
+    padding-bottom: 12px;
+  }
+
+  .pholy-photo-tabs {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .pholy-photo-tabs a {
+    min-height: 40px;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .pholy-photo-order {
+    display: none;
+  }
+
+  .pholy-viewer-toolbar {
+    padding-inline: 8px;
+  }
+
+  .pholy-viewer-identity {
+    flex: 0 0 auto;
+    padding-inline-end: 4px;
+  }
+
+  .pholy-viewer-name {
+    display: none;
+  }
+
+  .pholy-viewer-actions {
+    max-width: calc(100% - 44px);
+  }
+}
