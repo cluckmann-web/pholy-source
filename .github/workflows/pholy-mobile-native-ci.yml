@@ -1,0 +1,78 @@
+# Runs only on the isolated pholy-mobile-native-test verification branch.
+# No production account, release signing key, deployment, or repository write token.
+name: PHOLY native Android smoke
+
+on:
+  push:
+    branches:
+      - pholy-mobile-native-test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pholy-mobile-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-smoke:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/pholy-mobile-native-test'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CI: 'true'
+      FLUTTER_SUPPRESS_ANALYTICS: 'true'
+      DART_SUPPRESS_ANALYTICS: 'true'
+      RUSTUP_TOOLCHAIN: '1.99.1'
+      CARGO_BUILD_JOBS: '2'
+      PHOLY_FLUTTER_VERSION: '3.47.2'
+      PHOLY_FLUTTER_REVISION: d3b14c876900e553bc736ca19295fc09e3853e8e
+      PHOLY_FLUTTER_ENGINE: a804b261645ef8c13eb3d5c44a5c2fb0340c5539
+      PHOLY_NODE_VERSION: '24.22.1'
+      PHOLY_ANDROID_IMAGE: system-images;android-35;google_apis;x86_64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the isolated test branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install pinned toolchain and Android dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/pholy-native-evidence"
+          bash mobile/scripts/ci-native-smoke.sh setup 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/setup.log"
+
+      - name: Generate the existing mobile client and native bindings
+        run: bash mobile/scripts/ci-native-smoke.sh prepare 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/prepare.log"
+
+      - name: Build the synthetic debug APK before starting Android
+        run: bash mobile/scripts/ci-native-smoke.sh build 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/build.log"
+
+      - name: Run the native smoke flow on a KVM emulator
+        run: bash mobile/scripts/ci-native-smoke.sh run 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/run.log"
+
+      - name: Preserve logs, screenshots and result JSON
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pholy-native-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pholy-native-evidence/
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 6
+          include-hidden-files: false
+
+      - name: Record the scope of the result
+        if: always()
+        env:
+          PHOLY_JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            printf '## PHOLY native Android smoke\n\n'
+            printf 'Job status: **%s**.\n\n' "$PHOLY_JOB_STATUS"
+            printf 'Scope: a debug fixture APK on an Android 35 x86_64 KVM emulator, using only 127.0.0.1:17415.\n\n'
+            printf 'No production account, real user media, release-APK runtime verification, physical-device background test or iOS test is included.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
