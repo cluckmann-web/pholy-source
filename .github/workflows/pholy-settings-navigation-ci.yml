@@ -1,0 +1,47 @@
+name: PHOLY settings navigation regression
+
+on:
+  push:
+    branches:
+      - fix/pholy-settings-navigation
+
+permissions:
+  contents: read
+
+jobs:
+  navigation-widget-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out isolated fix branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Flutter 3.47.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 3.47.2 https://github.com/flutter/flutter.git "$RUNNER_TEMP/pholy-flutter"
+          test "$(git -C "$RUNNER_TEMP/pholy-flutter" rev-parse HEAD)" = d3b14c876900e553bc736ca19295fc09e3853e8e
+          echo "$RUNNER_TEMP/pholy-flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve locked dependencies
+        working-directory: mobile
+        env:
+          CI: 'true'
+          FLUTTER_SUPPRESS_ANALYTICS: 'true'
+          DART_SUPPRESS_ANALYTICS: 'true'
+        run: |
+          flutter --version
+          flutter pub get --enforce-lockfile
+
+      - name: Verify profile-dialog routing regression
+        working-directory: mobile
+        env:
+          CI: 'true'
+          FLUTTER_SUPPRESS_ANALYTICS: 'true'
+          DART_SUPPRESS_ANALYTICS: 'true'
+        run: |
+          flutter test --no-pub test/pholy/dialog_navigation_test.dart
+          dart format --output=none --set-exit-if-changed lib/utils/dialog_navigation.dart test/pholy/dialog_navigation_test.dart
