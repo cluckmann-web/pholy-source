@@ -81,18 +81,6 @@ void main() {
     bool surfaceConverted = false;
     bool completed = false;
 
-    Future<void> capture(String name) async {
-      await _hideKeyboard(tester);
-      if (!surfaceConverted) {
-        await binding.convertFlutterSurfaceToImage();
-        surfaceConverted = true;
-      }
-      await tester.pump(const Duration(milliseconds: 250));
-      final bytes = await binding.takeScreenshot(name);
-      await File('${evidence.path}/$name.png').writeAsBytes(bytes, flush: true);
-      screenshots.add('$name.png');
-    }
-
     Future<void> saveEvidence() async {
       final report = <String, dynamic>{
         'passed': completed,
@@ -113,9 +101,26 @@ void main() {
       // screenshot payload intact for the extended driver's onScreenshot hook.
       binding.reportData ??= <String, dynamic>{};
       binding.reportData!['pholySmoke'] = report;
-      await File(
-        '${evidence.path}/result.json',
-      ).writeAsString(const JsonEncoder.withIndent('  ').convert(report), flush: true);
+      final pendingReport = File('${evidence.path}/result.json.tmp');
+      await pendingReport.writeAsString(const JsonEncoder.withIndent('  ').convert(report), flush: true);
+      await pendingReport.rename('${evidence.path}/result.json');
+    }
+
+    Future<void> capture(String name) async {
+      // Persist completed checks before requesting a screenshot, so the host
+      // can retain progress even if the emulator or graphics backend stops.
+      await saveEvidence();
+      debugPrint('PHOLY_SMOKE_PROGRESS capture=$name checks=${checks.length} screenshots=${screenshots.length}');
+      await _hideKeyboard(tester);
+      if (!surfaceConverted) {
+        await binding.convertFlutterSurfaceToImage();
+        surfaceConverted = true;
+      }
+      await tester.pump(const Duration(milliseconds: 250));
+      final bytes = await binding.takeScreenshot(name);
+      await File('${evidence.path}/$name.png').writeAsBytes(bytes, flush: true);
+      screenshots.add('$name.png');
+      await saveEvidence();
     }
 
     addTearDown(() async {
@@ -273,12 +278,29 @@ void main() {
     final firstAsset = await providers.read(assetServiceProvider).getRemoteAsset(PholySmokeFixture.photoId);
     expect(firstAsset?.id, PholySmokeFixture.photoId);
     await _until(tester, () => _photoTile(PholySmokeFixture.photoId).evaluate().isNotEmpty, 'synced gallery thumbnail');
+    // The existing first-launch release notes are a modal route. A thumbnail
+    // can be built behind them, so close their real action before tapping it.
+    final releaseNotes = find.widgetWithText(Dialog, StaticTranslations.instance.whats_new);
+    if (releaseNotes.evaluate().isNotEmpty) {
+      await _tap(
+        tester,
+        find.descendant(of: releaseNotes, matching: find.widgetWithText(TextButton, StaticTranslations.instance.skip)),
+      );
+      await _until(tester, () => releaseNotes.evaluate().isEmpty, 'dismissed first-launch release notes');
+      checks.add('Existing first-launch release notes dismissed through the visible Skip action');
+    }
+    await tester.ensureVisible(_photoTile(PholySmokeFixture.photoId).first);
+    await _until(
+      tester,
+      () => _photoTile(PholySmokeFixture.photoId).hitTestable().evaluate().isNotEmpty,
+      'visible, unobscured gallery thumbnail',
+    );
     expect(fixture.syncRequests, greaterThan(0));
     expect(fixture.syncAcks, greaterThan(0));
     await capture('04-gallery');
     checks.add('Real remote sync stream acknowledged and stored in Drift; gallery thumbnail rendered');
 
-    await _tap(tester, _photoTile(PholySmokeFixture.photoId).first);
+    await _tap(tester, _photoTile(PholySmokeFixture.photoId).hitTestable().first);
     await _until(
       tester,
       () =>
@@ -569,9 +591,11 @@ Future<void> _until(
 
 Future<void> _tap(WidgetTester tester, Finder finder) async {
   await _until(tester, () => finder.evaluate().isNotEmpty, 'tap target $finder');
-  await tester.ensureVisible(finder);
-  await tester.pump(const Duration(milliseconds: 100));
-  await tester.tap(finder);
+  if (finder.hitTestable().evaluate().isEmpty) {
+    await tester.ensureVisible(finder);
+  }
+  await _until(tester, () => finder.hitTestable().evaluate().isNotEmpty, 'unobscured tap target $finder');
+  await tester.tap(finder.hitTestable());
   await tester.pump(const Duration(milliseconds: 200));
 }
 

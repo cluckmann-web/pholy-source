@@ -38,6 +38,7 @@ android_image=${PHOLY_ANDROID_IMAGE:-system-images;android-35;google_apis;x86_64
 apk="$repo_dir/mobile/build/app/outputs/flutter-apk/app-debug.apk"
 emulator_pid=
 logcat_pid=
+evidence_collector_pid=
 runtime_state=not-started
 
 mark_runtime_state() {
@@ -49,6 +50,10 @@ finish() {
   local exit_code=$?
   trap - EXIT INT TERM
   set +e
+  if [[ -n "$evidence_collector_pid" ]]; then
+    kill "$evidence_collector_pid" >/dev/null 2>&1
+    timeout 3 tail --pid="$evidence_collector_pid" -f /dev/null >/dev/null 2>&1
+  fi
   if [[ -n "$emulator_pid" ]]; then
     timeout 8 adb -s emulator-5554 shell 'getprop sys.boot_completed; getprop init.svc.bootanim; pidof system_server; service check package; service check activity' > "$evidence_dir/final-device-state.txt" 2>&1
     timeout 8 adb -s emulator-5554 logcat -b all -d -t 2000 > "$evidence_dir/final-logcat.txt" 2>&1
@@ -305,7 +310,25 @@ PY
   adb -s emulator-5554 shell pm grant de.pholy.app.debug android.permission.POST_NOTIFICATIONS
   cd "$repo_dir/mobile"
   mark_runtime_state synthetic-app-flow
+  # Device-side captures and partial reports must survive even if the emulator
+  # process dies before the integration driver can retrieve its final response.
+  # Only the synthetic test app's own evidence directory is copied.
+  mkdir -p "$evidence_dir/checkpoints"
+  (
+    trap - EXIT INT TERM
+    while kill -0 "$emulator_pid" 2>/dev/null; do
+      timeout 8 adb -s emulator-5554 pull \
+        /sdcard/Android/data/de.pholy.app.debug/files/pholy-smoke-evidence \
+        "$evidence_dir/checkpoints" >> "$evidence_dir/checkpoint-transfer.log" 2>&1 || true
+      sleep 5
+    done
+  ) &
+  evidence_collector_pid=$!
+  # The preceding emulator process segfaulted while Flutter used Impeller/GLES.
+  # Restrict this synthetic flow to Flutter's supported Skia CPU test backend;
+  # this runtime choice changes neither the APK nor the product manifest.
   timeout --signal=TERM --kill-after=30s 1200 flutter drive --no-pub -d emulator-5554 \
+    --no-enable-impeller --enable-software-rendering \
     --driver=test_driver/pholy_smoke_driver.dart \
     --target=integration_test/pholy_mobile_smoke_test.dart \
     --use-application-binary="$apk"
@@ -316,7 +339,7 @@ smoke=report.get('pholySmoke',{})
 assert smoke.get('passed') is True, 'Driver did not report completion of the synthetic flow'
 assert smoke.get('fixtureUrl') == 'http://127.0.0.1:17415'
 assert smoke.get('applicationId') == 'de.pholy.app.debug'
-print('Native synthetic flow completed; production and physical-device behavior remain outside this test.')
+print('Native synthetic flow completed using Flutter software rendering; production renderer and physical-device behavior remain outside this test.')
 PY
   mark_runtime_state synthetic-flow-completed
 }

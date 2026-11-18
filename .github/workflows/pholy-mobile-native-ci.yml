@@ -62,6 +62,10 @@ jobs:
             ${{ runner.temp }}/pholy-native-ci/cargo/registry/src
             !${{ runner.temp }}/pholy-native-ci/gradle/caches/**/*.lock
           key: pholy-deps-v1-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.PHOLY_FLUTTER_REVISION }}-rust-${{ env.RUSTUP_TOOLCHAIN }}-jdk21.0.2-ndk28.2.13676358-node${{ env.PHOLY_NODE_VERSION }}-${{ hashFiles('mobile/pubspec.lock', 'native/Cargo.lock', 'native/native_core/pubspec.yaml', 'native/crates/native_core_ffi/rust-toolchain.toml', 'mobile/android/**/*.gradle', 'mobile/android/**/*.gradle.kts', 'mobile/android/gradle.properties', 'mobile/android/gradle/wrapper/gradle-wrapper.properties', 'mobile/scripts/build_runner_patch.mjs', 'mobile/scripts/ci-native-smoke.sh') }}
+          # Exact previous cache: only runtime/evidence handling changed;
+          # toolchain, dependency locks and native build inputs are identical.
+          restore-keys: |
+            pholy-deps-v1-Linux-X64-flutter-d3b14c876900e553bc736ca19295fc09e3853e8e-rust-1.99.1-jdk21.0.2-ndk28.2.13676358-node24.22.1-8388b7e8604179d80375fdb4cd3a73273102184a9217693cad02b95b4dd04766
 
       - name: Restore matching Rust compilation caches
         id: rust-cache
@@ -75,6 +79,8 @@ jobs:
           # The host build emits its header outside target/. Cache that header
           # with the matching Rust sources, never stale generated Dart bindings.
           key: pholy-rust-v1-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.PHOLY_FLUTTER_REVISION }}-rust-${{ env.RUSTUP_TOOLCHAIN }}-jdk21.0.2-ndk28.2.13676358-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml', 'native/.cargo/config.toml', 'native/crates/**/*.toml', 'native/crates/**/*.rs', 'native/native_core/pubspec.yaml', 'native/native_core/hook/**', 'mobile/pubspec.lock', 'mobile/scripts/ci-native-smoke.sh') }}
+          restore-keys: |
+            pholy-rust-v1-Linux-X64-flutter-d3b14c876900e553bc736ca19295fc09e3853e8e-rust-1.99.1-jdk21.0.2-ndk28.2.13676358-bee265d5df8d46eea6b3671258ef6dff42e3180fb9044d733874be635e72e474
 
       - name: Generate the existing mobile client and native bindings
         run: bash mobile/scripts/ci-native-smoke.sh prepare 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/prepare.log"
@@ -157,6 +163,6 @@ jobs:
             printf 'Job status: **%s**.\n\n' "$PHOLY_JOB_STATUS"
             printf 'Native smoke step: **%s**.\n\n' "$PHOLY_SMOKE_OUTCOME"
             printf 'Cache saves: dependencies=%s; Rust=%s. Fixture APK artifact=%s. These support steps do not determine application test success.\n\n' "$PHOLY_DEPENDENCY_CACHE_OUTCOME" "$PHOLY_RUST_CACHE_OUTCOME" "$PHOLY_FIXTURE_ARTIFACT_OUTCOME"
-            printf 'Scope: a debug fixture APK on an Android 35 x86_64 KVM emulator, using only 127.0.0.1:17415.\n\n'
+            printf 'Scope: a debug fixture APK on an Android 35 x86_64 KVM emulator with Flutter Skia software rendering, using only 127.0.0.1:17415.\n\n'
             printf 'No production account, real user media, release-APK runtime verification, physical-device background test or iOS test is included.\n'
           } >> "$GITHUB_STEP_SUMMARY"
