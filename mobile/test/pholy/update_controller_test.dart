@@ -230,6 +230,9 @@ void main() {
     await _flush();
     expect(platform.infoCalls, 1);
     platform.infoGate!.complete(platform.app);
+    // Startup also performs best-effort filesystem cleanup. Await the actual
+    // initialization boundary rather than assuming a number of microtasks.
+    await controller.initialize();
     await _flush();
     expect(service.fetchCalls, 1);
     service.fetchGate!.complete(service.latest);
