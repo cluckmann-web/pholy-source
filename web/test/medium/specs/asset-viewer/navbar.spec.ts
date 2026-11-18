@@ -31,7 +31,7 @@ test.describe('asset viewer navbar on a shared link without metadata', () => {
     await page.goto(`${Route.viewSharedLink({ key: link.key })}/photos/${asset.id}`);
     await app.viewer.waitForAsset(asset);
 
-    await expectActions(app, ['zoom_image', 'copy_image', 'download']);
+    await expectActions(app, ['download', 'zoom_image', 'copy_image']);
   });
 
   test('shows owner actions', async ({ page, data, app }) => {
@@ -39,7 +39,7 @@ test.describe('asset viewer navbar on a shared link without metadata', () => {
     await page.goto(`${Route.viewSharedLink({ key: link.key })}/photos/${asset.id}`);
     await app.viewer.waitForAsset(asset);
 
-    await expectActions(app, ['share', 'zoom_image', 'copy_image', 'download', 'to_favorite', 'delete']);
+    await expectActions(app, ['share', 'to_favorite', 'download', 'zoom_image', 'copy_image', 'delete']);
   });
 });
 

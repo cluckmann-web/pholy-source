@@ -2,12 +2,14 @@ import type { PhotoComment, PhotoCommentsPage } from '#lib/queries/pholy-comment
 import { Route } from '#lib/route.ts';
 import { factory } from '#test/common/factories.ts';
 import { expect, test } from '#test/medium/fixtures.ts';
+import { SharedLinkType } from '@immich/sdk';
 import type { Page } from '@playwright/test';
 
 const pattern = '**/api/pholy/comments/**';
 const communityPattern = '**/api/pholy/community**';
 const slug = 'synthetic-comment-gallery';
 const assetId = '00000000-0000-4000-8000-000000000301';
+const photoPattern = `**/api/assets/${assetId}/thumbnail*`;
 const secondAssetId = '00000000-0000-4000-8000-000000000302';
 const commentId = '00000000-0000-4000-8000-000000000401';
 const replyId = '00000000-0000-4000-8000-000000000402';
@@ -68,6 +70,7 @@ test.use({ language: 'de' });
 test.afterEach(async ({ page }) => {
   await page.unroute(pattern);
   await page.unroute(communityPattern);
+  await page.unroute(photoPattern);
 });
 
 test('members comment, reply, like, edit and delete with a preserved reply thread', async ({ page, data }) => {
@@ -245,31 +248,215 @@ test('changing photos does not retain another photo comment or draft', async ({ 
   expect(ids).toContain(secondAssetId);
 });
 
-test('private photo viewer uses the private thread and typing arrows does not navigate', async ({
+test('private photo opens with comments beside it and accepts a comment without another dialog', async ({
   page,
   data,
   app,
 }) => {
-  const asset = factory.asset({ id: assetId, ownerId: data.user.id });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.route(photoPattern, (route) => route.fulfill({ contentType: 'image/svg+xml', body: svg }));
+  const asset = factory.asset({ id: assetId, ownerId: data.user.id, width: 1000, height: 750 });
   data.addAssets(asset);
-  const contexts: string[] = [];
+  const roots: PhotoComment[] = [];
+  const requests: { method: string; kind: string; body?: unknown }[] = [];
   await page.route(pattern, async (route) => {
-    contexts.push(new URL(route.request().url()).searchParams.get('kind')!);
-    await route.fulfill({ json: result([]) });
+    const req = route.request();
+    const url = new URL(req.url());
+    const body = req.method() === 'POST' ? req.postDataJSON() : undefined;
+    requests.push({ method: req.method(), kind: body?.kind ?? url.searchParams.get('kind')!, body });
+    if (body) {
+      const value = comment({ body: body.body, canEdit: true, canDelete: true });
+      roots.push(value);
+      await route.fulfill({ status: 201, json: value });
+    } else await route.fulfill({ json: result(roots) });
   });
   await page.goto(Route.viewAsset({ id: assetId }));
   await app.viewer.waitForAsset(asset);
-  await page.getByRole('button', { name: 'Kommentare', exact: true }).click();
+  const panel = page.getByTestId('photo-comments-panel');
+  await expect(panel).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Kommentare', exact: true })).toHaveCount(0);
   await expect(
-    page.getByText('Nur du siehst diese Unterhaltung. Sie bleibt beim Teilen des Fotos privat.'),
+    panel.getByText('Nur du siehst diese Unterhaltung. Sie bleibt beim Teilen des Fotos privat.'),
   ).toBeVisible();
-  const input = page.getByRole('textbox', { name: 'Schreibe einen Kommentar …' });
-  await input.fill('Entwurf');
+  const input = panel.getByRole('textbox', { name: 'Schreibe einen Kommentar …' });
+  await expect(input).toBeInViewport({ ratio: 1 });
+  const photoBox = (await app.viewer.content.boundingBox())!;
+  const panelBox = (await panel.boundingBox())!;
+  expect(panelBox.x).toBeGreaterThanOrEqual(photoBox.x + photoBox.width - 1);
+  expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(1441);
+  await input.fill('Direkt am Foto kommentiert');
   await input.press('ArrowLeft');
   await input.press('ArrowRight');
-  await expect(input).toHaveValue('Entwurf');
+  await expect(input).toHaveValue('Direkt am Foto kommentiert');
   await expect(page).toHaveURL(Route.viewAsset({ id: assetId }));
-  expect(contexts).toEqual(['private']);
+  await input.press('Enter');
+  await expect(panel.getByText('Direkt am Foto kommentiert', { exact: true })).toBeVisible();
+  await expect(input).toHaveValue('');
+  expect(requests.filter(({ method }) => method === 'POST')).toEqual([
+    { method: 'POST', kind: 'private', body: { kind: 'private', body: 'Direkt am Foto kommentiert' } },
+  ]);
+  expect(requests.every(({ kind }) => kind === 'private')).toBe(true);
+  await page.screenshot({ path: 'test-results/pholy-inline-comments-desktop.png' });
+});
+
+test('moving to the next photo changes the inline thread and clears the previous draft', async ({
+  page,
+  data,
+  app,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const first = factory.asset({ id: assetId, ownerId: data.user.id, fileCreatedAt: '2026-11-18T10:00:00.000Z' });
+  const second = factory.asset({ id: secondAssetId, ownerId: data.user.id, fileCreatedAt: '2026-11-17T10:00:00.000Z' });
+  data.addAssets([first, second]);
+  const ids: string[] = [];
+  await page.route(pattern, async (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split('/').at(-1)!;
+    expect(url.searchParams.get('kind')).toBe('private');
+    ids.push(id);
+    await route.fulfill({ json: result(id === assetId ? [comment()] : []) });
+  });
+  await page.goto(Route.viewAsset({ id: assetId }));
+  await app.viewer.waitForAsset(first);
+  const input = page.getByRole('textbox', { name: 'Schreibe einen Kommentar …' });
+  await expect(page.getByText('Das Licht zwischen den Bergen ist wunderschön.')).toBeVisible();
+  await input.fill('Nur für das erste Foto');
+  await input.press('ArrowRight');
+  await expect(page).toHaveURL(Route.viewAsset({ id: assetId }));
+  await page.getByLabel('Nächste Datei anzeigen', { exact: true }).click();
+  await app.viewer.waitForAsset(second);
+  await expect(page).toHaveURL(Route.viewAsset({ id: secondAssetId }));
+  await expect(input).toHaveValue('');
+  await expect(page.getByText('Das Licht zwischen den Bergen ist wunderschön.')).toHaveCount(0);
+  expect(ids).toContain(secondAssetId);
+  await page.getByLabel('Vorherige Datei anzeigen', { exact: true }).click();
+  await app.viewer.waitForAsset(first);
+  await expect(input).toHaveValue('');
+  await expect(page.getByText('Das Licht zwischen den Bergen ist wunderschön.')).toBeVisible();
+});
+
+test('hovering over a stacked photo preserves the selected photo draft until another photo is selected', async ({
+  page,
+  data,
+  app,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const primary = factory.asset({ id: assetId, ownerId: data.user.id });
+  const second = factory.asset({ id: secondAssetId, ownerId: data.user.id });
+  data.addStacks(factory.stack({ assets: [primary, second] }));
+  const ids: string[] = [];
+  await page.route(pattern, async (route) => {
+    ids.push(new URL(route.request().url()).pathname.split('/').at(-1)!);
+    await route.fulfill({ json: result([]) });
+  });
+  await page.goto(Route.viewAsset({ id: assetId }));
+  await app.viewer.waitForAsset(primary);
+  const input = page.getByRole('textbox', { name: 'Schreibe einen Kommentar …' });
+  await input.fill('Entwurf zum ausgewählten Foto');
+  await app.viewer.stackThumbnail(second).hover();
+  await app.viewer.waitForAsset(primary);
+  await expect(input).toHaveValue('Entwurf zum ausgewählten Foto');
+  await app.viewer.content.hover({ position: { x: 20, y: 100 } });
+  await expect(input).toBeVisible();
+  await expect(input).toHaveValue('Entwurf zum ausgewählten Foto');
+  expect(ids).not.toContain(secondAssetId);
+  await app.viewer.stackThumbnail(second).click();
+  await app.viewer.waitForAsset(second);
+  await expect(input).toHaveValue('');
+  expect(ids).toContain(secondAssetId);
+});
+
+test('mobile photo shows the inline composer below the image even with a long discussion', async ({
+  page,
+  data,
+  app,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.route(photoPattern, (route) => route.fulfill({ contentType: 'image/svg+xml', body: svg }));
+  const asset = factory.asset({ id: assetId, ownerId: data.user.id, width: 1000, height: 750 });
+  data.addAssets(asset);
+  await page.route(pattern, (route) =>
+    route.fulfill({
+      json: result(Array.from({ length: 8 }, (_, index) => comment({ id: `${commentId}-${index}` }))),
+    }),
+  );
+  await page.goto(Route.viewAsset({ id: assetId }));
+  await app.viewer.waitForAsset(asset);
+  const panel = page.getByTestId('photo-comments-panel');
+  const input = panel.getByRole('textbox', { name: 'Schreibe einen Kommentar …' });
+  await expect(input).toBeInViewport({ ratio: 1 });
+  const photoBox = (await app.viewer.content.boundingBox())!;
+  const panelBox = (await panel.boundingBox())!;
+  expect(panelBox.y).toBeGreaterThanOrEqual(photoBox.y + photoBox.height - 1);
+  expect(panelBox.width).toBeLessThanOrEqual(391);
+  expect(panelBox.height).toBeGreaterThan(200);
+  await input.fill('Ohne weiteren Klick');
+  await input.press('Shift+Enter');
+  await input.press('End');
+  await input.press('x');
+  await expect(input).toHaveValue('Ohne weiteren Klick\nx');
+  await expect(page).toHaveURL(Route.viewAsset({ id: assetId }));
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth))
+    .toBeLessThanOrEqual(1);
+  await page.screenshot({ path: 'test-results/pholy-inline-comments-mobile.png' });
+});
+
+test('comments open despite a persisted details preference and return after details or slideshow closes', async ({
+  page,
+  data,
+  app,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const asset = factory.asset({ id: assetId, ownerId: data.user.id });
+  data.addAssets(asset);
+  await page.route(pattern, (route) => route.fulfill({ json: result([]) }));
+  await page.goto(Route.photos());
+  await page.evaluate(() => localStorage.setItem('asset-viewer-state', 'true'));
+  await page.goto(Route.viewAsset({ id: assetId }));
+  await app.viewer.waitForAsset(asset);
+  const panel = page.getByTestId('photo-comments-panel');
+  await expect(panel).toBeVisible();
+  await page.getByLabel('Info', { exact: true }).click();
+  await expect(app.viewer.detailPanel).toBeVisible();
+  await expect(panel).toBeHidden();
+  await app.viewer.detailPanel.getByLabel('Schließen', { exact: true }).click();
+  await expect(panel).toBeVisible();
+  await page.getByLabel('Mehr', { exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Diashow', exact: true }).click();
+  await expect(page.getByLabel('Diashow beenden', { exact: true })).toBeVisible();
+  await expect(panel).toBeHidden();
+  await page.getByLabel('Diashow beenden', { exact: true }).click();
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('textbox', { name: 'Schreibe einen Kommentar …' })).toBeVisible();
+});
+
+test('shared-link photos do not load private comments for either the owner or a guest', async ({
+  page,
+  context,
+  data,
+  app,
+}) => {
+  const asset = factory.asset({ id: assetId, ownerId: data.user.id });
+  const link = factory.sharedLink({ type: SharedLinkType.Individual, assets: [asset, factory.asset()] });
+  data.addSharedLinks(link);
+  let requests = 0;
+  await page.route(pattern, (route) => {
+    requests++;
+    return route.fulfill({ json: result([comment()]) });
+  });
+  const url = `${Route.viewSharedLink({ key: link.key })}/photos/${asset.id}`;
+  await page.goto(url);
+  await app.viewer.waitForAsset(asset);
+  await expect(page.getByTestId('photo-comments-panel')).toHaveCount(0);
+  expect(requests).toBe(0);
+  await context.clearCookies();
+  await page.goto(url);
+  await app.viewer.waitForAsset(asset);
+  await expect(page.getByTestId('photo-comments-panel')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Schreibe einen Kommentar …' })).toHaveCount(0);
+  expect(requests).toBe(0);
 });
 
 test('pagination retains existing roots and disabled discussions have no composer', async ({ page }) => {

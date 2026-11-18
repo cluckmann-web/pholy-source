@@ -82,6 +82,12 @@ test.describe('detail panel', () => {
     await page.goto(`${Route.viewSharedLink({ key: visible.key })}/photos/${asset.id}`);
     await app.viewer.waitForAsset(asset);
     await expect(app.viewer.infoButton).toBeVisible();
+    // Shared links retain the saved detail-panel preference. Start closed and
+    // wait for its outro so the first shortcut assertion cannot pass mid-close.
+    if (await app.viewer.detailPanel.isVisible()) {
+      await app.viewer.detailPanel.getByLabel('close', { exact: true }).click();
+    }
+    await expect(app.viewer.detailPanel).toHaveCount(0);
     await page.keyboard.press('i');
     await expect(app.viewer.detailPanel).toBeVisible();
     await page.keyboard.press('i');

@@ -112,6 +112,11 @@ export class Dispatcher {
         },
       };
     }
+    // Photo discussions are loaded by default in the viewer and use PHOLY's session API.
+    // Dedicated discussion tests override this read; mutations must remain explicit.
+    if (method === 'GET' && /^\/api\/pholy\/comments\/[^/]+$/.test(url.pathname)) {
+      return { status: 200, json: { comments: [], nextOffset: null, total: 0, canComment: true } };
+    }
     const match = matchOperation(method, url.pathname);
     if (!match) {
       this.unhandled.push(`${method} ${url.pathname}${url.search} (no matching OpenAPI operation)`);

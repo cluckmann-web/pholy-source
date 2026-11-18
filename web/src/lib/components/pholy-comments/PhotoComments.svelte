@@ -15,10 +15,20 @@
   import { Icon } from '@immich/ui';
   import { mdiThumbUp, mdiThumbUpOutline } from '@mdi/js';
   import { createInfiniteQuery, createMutation } from '@tanstack/svelte-query';
-  import { tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { locale, t } from 'svelte-i18n';
 
-  let { assetId, context }: { assetId: string; context: PhotoCommentContext } = $props();
+  let {
+    assetId,
+    context,
+    panel = false,
+    onDraftChange,
+  }: {
+    assetId: string;
+    context: PhotoCommentContext;
+    panel?: boolean;
+    onDraftChange?: (hasDraft: boolean) => void;
+  } = $props();
   const authenticated = $derived(authManager.authenticated && !authManager.isSharedLink);
   const thread = createInfiniteQuery(
     () => ({
@@ -45,6 +55,10 @@
   let error = $state('');
   let replyInput = $state<HTMLTextAreaElement>();
   let editInput = $state<HTMLTextAreaElement>();
+  $effect(() => {
+    onDraftChange?.(Boolean(message || (replyId && replyMessage) || editingId));
+  });
+  onDestroy(() => onDraftChange?.(false));
   const scopeHint = $derived(
     context.kind === 'private'
       ? $t('pholy_comments.scope_private')
@@ -248,7 +262,7 @@
   </article>
 {/snippet}
 
-<section class="photo-comments" aria-label={$t('pholy_comments.title')}>
+<section class="photo-comments" class:panel aria-label={$t('pholy_comments.title')}>
   <header>
     <h2>{$t('pholy_comments.title')}</h2>
     {#if authenticated && thread.data}<span>{$t('pholy_comments.total', { values: { count: total } })}</span>{/if}
@@ -274,50 +288,52 @@
       <p class="notice error" role="alert">{thread.error.message}</p>
       <button type="button" onclick={() => thread.refetch()}>{$t('pholy_comments.retry')}</button>
     {:else}
-      {#if comments.length === 0}<p class="notice">{$t('pholy_comments.empty')}</p>{/if}
-      <div class="threads">
-        {#each comments as comment (comment.id)}
-          <div class="thread">
-            {@render entry(comment)}
-            {#each comment.replies as reply (reply.id)}{@render entry(reply, true, !comment.deleted)}{/each}
-            {#if replyId === comment.id}
-              <form
-                class="reply-composer"
-                onsubmit={(event) => {
-                  event.preventDefault();
-                  void submit(comment.id);
-                }}
-              >
-                <label for="reply-{comment.id}"
-                  >{$t('pholy_comments.reply_to', { values: { name: name(comment) } })}</label
+      <div class="discussion-list">
+        {#if comments.length === 0}<p class="notice">{$t('pholy_comments.empty')}</p>{/if}
+        <div class="threads">
+          {#each comments as comment (comment.id)}
+            <div class="thread">
+              {@render entry(comment)}
+              {#each comment.replies as reply (reply.id)}{@render entry(reply, true, !comment.deleted)}{/each}
+              {#if replyId === comment.id}
+                <form
+                  class="reply-composer"
+                  onsubmit={(event) => {
+                    event.preventDefault();
+                    void submit(comment.id);
+                  }}
                 >
-                <textarea
-                  id="reply-{comment.id}"
-                  bind:this={replyInput}
-                  bind:value={replyMessage}
-                  placeholder={$t('pholy_comments.reply_write')}
-                  maxlength="2000"
-                  rows="2"
-                  disabled={pending}
-                  onkeydown={(event) => keydown(event, () => submit(comment.id))}></textarea>
-                <div class="form-actions">
-                  <button class="primary" type="submit" disabled={pending || !replyMessage.trim()}
-                    >{$t('pholy_comments.send_reply')}</button
-                  ><button type="button" disabled={pending} onclick={() => (replyId = undefined)}
-                    >{$t('pholy_comments.cancel')}</button
+                  <label for="reply-{comment.id}"
+                    >{$t('pholy_comments.reply_to', { values: { name: name(comment) } })}</label
                   >
-                </div>
-              </form>
-            {/if}
-          </div>
-        {/each}
+                  <textarea
+                    id="reply-{comment.id}"
+                    bind:this={replyInput}
+                    bind:value={replyMessage}
+                    placeholder={$t('pholy_comments.reply_write')}
+                    maxlength="2000"
+                    rows="2"
+                    disabled={pending}
+                    onkeydown={(event) => keydown(event, () => submit(comment.id))}></textarea>
+                  <div class="form-actions">
+                    <button class="primary" type="submit" disabled={pending || !replyMessage.trim()}
+                      >{$t('pholy_comments.send_reply')}</button
+                    ><button type="button" disabled={pending} onclick={() => (replyId = undefined)}
+                      >{$t('pholy_comments.cancel')}</button
+                    >
+                  </div>
+                </form>
+              {/if}
+            </div>
+          {/each}
+        </div>
+        {#if thread.hasNextPage}<button
+            class="more"
+            type="button"
+            disabled={thread.isFetchingNextPage}
+            onclick={() => thread.fetchNextPage()}>{$t('pholy_comments.more')}</button
+          >{/if}
       </div>
-      {#if thread.hasNextPage}<button
-          class="more"
-          type="button"
-          disabled={thread.isFetchingNextPage}
-          onclick={() => thread.fetchNextPage()}>{$t('pholy_comments.more')}</button
-        >{/if}
       {#if canComment}
         <form
           class="composer"
@@ -361,6 +377,33 @@
     min-width: 0;
     padding: 20px;
     background: var(--color-light, #fff);
+  }
+  .photo-comments.panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 300px;
+  }
+  .panel > header,
+  .panel > .scope,
+  .panel > .notice,
+  .panel > .composer {
+    flex-shrink: 0;
+  }
+  .panel .discussion-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding: 2px;
+  }
+  .panel .composer {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+  .panel .composer textarea {
+    max-height: 180px;
   }
   header {
     display: flex;

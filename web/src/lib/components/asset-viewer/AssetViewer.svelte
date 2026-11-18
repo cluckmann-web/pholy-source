@@ -7,6 +7,7 @@
   import NextAssetAction from '#lib/components/asset-viewer/actions/NextAssetAction.svelte';
   import PreviousAssetAction from '#lib/components/asset-viewer/actions/PreviousAssetAction.svelte';
   import type { Action, OnAction, PreAction } from '#lib/components/asset-viewer/actions/action.ts';
+  import PhotoComments from '#lib/components/pholy-comments/PhotoComments.svelte';
   import { AssetAction, ProjectionType } from '#lib/constants.ts';
   import { activityManager } from '#lib/managers/activity-manager.svelte.ts';
   import { assetViewerManager } from '#lib/managers/asset-viewer-manager.svelte.ts';
@@ -14,13 +15,13 @@
   import { EditToolType, editManager } from '#lib/managers/edit/edit-manager.svelte.ts';
   import { eventManager } from '#lib/managers/event-manager.svelte.ts';
   import type { TimelineAsset } from '#lib/managers/timeline-manager/types.ts';
-  import PhotoCommentsModal from '#lib/modals/PhotoCommentsModal.svelte';
+  import type { PhotoCommentContext } from '#lib/queries/pholy-comments.query.ts';
   import { getAssetActions } from '#lib/services/asset.service.ts';
   import { faceManager } from '#lib/stores/face.svelte.ts';
   import { ocrManager } from '#lib/stores/ocr.svelte.ts';
   import { alwaysLoadOriginalVideo } from '#lib/stores/preferences.store.ts';
   import { SlideshowNavigation, SlideshowState, slideshowStore } from '#lib/stores/slideshow.store.ts';
-  import { getAssetMediaUrl, getSharedLink, handlePromiseError } from '#lib/utils.ts';
+  import { getSharedLink, handlePromiseError } from '#lib/utils.ts';
   import type { OnUndoDelete } from '#lib/utils/actions.ts';
   import { navigateToAsset } from '#lib/utils/asset-utils.ts';
   import { handleError } from '#lib/utils/handle-error.ts';
@@ -29,7 +30,6 @@
   import { SlideshowHistory } from '#lib/utils/slideshow-history.ts';
   import { toTimelineAsset } from '#lib/utils/timeline-util.ts';
   import {
-    AssetMediaSize,
     AssetTypeEnum,
     AssetVisibility,
     getAssetInfo,
@@ -39,8 +39,7 @@
     type PersonResponseDto,
     type StackResponseDto,
   } from '@immich/sdk';
-  import { CommandPaletteDefaultProvider, Icon, modalManager } from '@immich/ui';
-  import { mdiCommentOutline } from '@mdi/js';
+  import { CommandPaletteDefaultProvider } from '@immich/ui';
   import { onDestroy, onMount, untrack } from 'svelte';
   import type { SwipeCustomEvent } from 'svelte-gestures';
   import { t } from 'svelte-i18n';
@@ -107,6 +106,7 @@
   const stackSelectedThumbnailSize = 65;
 
   let previewStackedAsset: AssetResponseDto | undefined = $state();
+  let hasPhotoCommentDraft = $state(false);
   let stack: StackResponseDto | undefined = $state();
 
   const asset = $derived(previewStackedAsset ?? cursor.current);
@@ -347,6 +347,11 @@
   };
 
   const handleStackedAssetMouseEvent = (isMouseOver: boolean, stackedAsset: AssetResponseDto) => {
+    // Hover previews must not replace a discussion while someone is writing.
+    // An explicit selection still changes the photo and resets its draft.
+    if (hasPhotoCommentDraft) {
+      return;
+    }
     previewStackedAsset = isMouseOver ? stackedAsset : undefined;
   };
 
@@ -474,24 +479,40 @@
       !assetViewerManager.isShowEditor,
   );
 
-  const canOpenPhotoComments = $derived(
+  const canUsePhotoComments = $derived(
     authManager.authenticated &&
       !authManager.isSharedLink &&
       !sharedLink &&
       asset.type === AssetTypeEnum.Image &&
       asset.visibility !== AssetVisibility.Locked &&
       !asset.isTrashed &&
-      (Boolean(album) || asset.ownerId === authManager.user.id) &&
-      $slideshowState === SlideshowState.None &&
-      !assetViewerManager.isShowEditor,
+      (Boolean(album) || asset.ownerId === authManager.user.id),
   );
-  const openPhotoComments = () =>
-    modalManager.show(PhotoCommentsModal, {
-      assetId: asset.id,
-      context: album ? { kind: 'album', albumId: album.id } : { kind: 'private' },
-      imageUrl: getAssetMediaUrl({ id: asset.id, size: AssetMediaSize.Preview, cacheKey: asset.thumbhash }),
-      imageAlt: $t('pholy_comments.photo'),
-    });
+  // Initialize once before rendering. Applying this on mount would briefly
+  // render a remembered detail panel and then remove it during its transition.
+  // Explicit panel choices within this viewing session remain unchanged.
+  untrack(() => {
+    if (
+      canUsePhotoComments &&
+      $slideshowState === SlideshowState.None &&
+      !assetViewerManager.isShowEditor &&
+      !assetViewerManager.isFaceEditMode
+    ) {
+      assetViewerManager.closeDetailPanel();
+      assetViewerManager.closeActivityPanel();
+    }
+  });
+  const showPhotoComments = $derived(
+    canUsePhotoComments &&
+      $slideshowState === SlideshowState.None &&
+      !assetViewerManager.isShowEditor &&
+      !assetViewerManager.isFaceEditMode &&
+      !showDetailPanel &&
+      !(isShared && album && assetViewerManager.isShowActivityPanel),
+  );
+  const photoCommentContext = $derived<PhotoCommentContext>(
+    album ? { kind: 'album', albumId: album.id } : { kind: 'private' },
+  );
 
   const onSwipe = (event: SwipeCustomEvent) => {
     if (assetViewerManager.zoom > 1) {
@@ -530,6 +551,7 @@
 
 <section
   id="immich-asset-viewer"
+  class:with-photo-comments={showPhotoComments}
   class="fixed inset-s-0 top-0 grid size-full grid-cols-4 grid-rows-[64px_1fr] overflow-hidden bg-black"
   use:focusTrap
   bind:this={assetViewerHtmlElement}
@@ -566,7 +588,7 @@
   {/if}
 
   {#if $slideshowState === SlideshowState.None && showNavigation && !assetViewerManager.isShowEditor && !assetViewerManager.isFaceEditMode && previousAsset}
-    <div class="col-span-1 col-start-1 row-span-full row-start-1 my-auto justify-self-start">
+    <div class="photo-navigation col-span-1 col-start-1 row-span-full row-start-1 my-auto justify-self-start">
       <PreviousAssetAction onPreviousAsset={() => navigateAsset('previous')} />
     </div>
   {/if}
@@ -620,14 +642,6 @@
       />
     {/if}
 
-    {#if canOpenPhotoComments}
-      <div class="absolute bottom-0 left-0 mb-6 ml-6">
-        <button class="pholy-photo-comments-button" type="button" onclick={openPhotoComments}
-          ><Icon icon={mdiCommentOutline} size="20" />{$t('pholy_comments.title')}</button
-        >
-      </div>
-    {/if}
-
     {#if showActivityStatus}
       <div class="absolute inset-e-0 bottom-0 me-8 mb-20">
         <ActivityStatus
@@ -652,9 +666,27 @@
   </div>
 
   {#if $slideshowState === SlideshowState.None && showNavigation && !assetViewerManager.isShowEditor && !assetViewerManager.isFaceEditMode && nextAsset}
-    <div class="col-span-1 col-start-4 row-span-full row-start-1 my-auto justify-self-end">
+    <div class="photo-navigation col-span-1 col-start-4 row-span-full row-start-1 my-auto justify-self-end">
       <NextAssetAction onNextAsset={() => navigateAsset('next')} />
     </div>
+  {/if}
+
+  {#if showPhotoComments}
+    <aside
+      class="photo-comments-panel"
+      data-testid="photo-comments-panel"
+      aria-label={$t('pholy_comments.title')}
+      translate="yes"
+    >
+      {#key asset.id + JSON.stringify(photoCommentContext)}
+        <PhotoComments
+          assetId={asset.id}
+          context={photoCommentContext}
+          panel
+          onDraftChange={(hasDraft) => (hasPhotoCommentDraft = hasDraft)}
+        />
+      {/key}
+    </aside>
   {/if}
 
   {#if showDetailPanel || assetViewerManager.isShowEditor}
@@ -676,7 +708,7 @@
   {/if}
 
   {#if stack && withStacked && !assetViewerManager.isShowEditor && $slideshowState === SlideshowState.None}
-    <div data-testid="stack-slideshow" class="absolute bottom-0 col-span-4 col-start-1 w-fit max-w-full">
+    <div data-testid="stack-slideshow" class="photo-stack absolute bottom-0 col-span-4 col-start-1 w-fit max-w-full">
       <div class="no-wrap horizontal-scrollbar relative flex flex-row overflow-x-auto overflow-y-hidden">
         {#each stack.assets as stackedAsset (stackedAsset.id)}
           <div
@@ -728,22 +760,39 @@
 </section>
 
 <style>
-  .pholy-photo-comments-button {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 11px 16px;
-    background: rgba(255, 255, 255, 0.94);
-    color: #172033;
-    border: 1px solid #dce2ea;
-    border-radius: 0;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
+  #immich-asset-viewer.with-photo-comments {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) clamp(320px, 29vw, 410px);
+    grid-template-rows: 64px minmax(0, 1fr);
+    height: 100dvh;
   }
-  .pholy-photo-comments-button:focus-visible {
-    outline: 3px solid #5c8cff;
-    outline-offset: 3px;
+  .photo-comments-panel {
+    grid-column: 5;
+    grid-row: 1 / -1;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-inline-start: 1px solid #e7ebf0;
+    background: var(--color-light, #fff);
+  }
+  @media (max-width: 800px) {
+    #immich-asset-viewer.with-photo-comments {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-rows: 64px min(42dvh, 440px) minmax(0, 1fr);
+    }
+    .with-photo-comments [data-testid='viewer-content'],
+    .with-photo-comments .photo-navigation {
+      grid-row: 2;
+    }
+    .with-photo-comments .photo-stack {
+      grid-row: 2;
+    }
+    .photo-comments-panel {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      border-inline-start: 0;
+      border-top: 1px solid #e7ebf0;
+    }
   }
   #immich-asset-viewer {
     contain: layout;
