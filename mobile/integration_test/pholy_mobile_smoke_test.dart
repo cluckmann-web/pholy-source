@@ -19,6 +19,7 @@ import 'package:immich_mobile/infrastructure/repositories/settings.repository.da
 import 'package:immich_mobile/main.dart' as app;
 import 'package:immich_mobile/pages/common/tab_shell.page.dart';
 import 'package:immich_mobile/pages/login/pholy_password_recovery.page.dart';
+import 'package:immich_mobile/pholy/comments/photo_comments.widget.dart';
 import 'package:immich_mobile/pholy/community/community.page.dart';
 import 'package:immich_mobile/pholy/community/community_profile.page.dart';
 import 'package:immich_mobile/platform/background_worker_api.g.dart';
@@ -28,7 +29,6 @@ import 'package:immich_mobile/providers/auth.provider.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
-import 'package:immich_mobile/providers/websocket.provider.dart';
 import 'package:immich_mobile/services/foreground_upload.service.dart';
 import 'package:immich_mobile/utils/bootstrap.dart';
 import 'package:immich_mobile/widgets/forms/login/login_form.dart';
@@ -75,32 +75,29 @@ void main() {
     final fixture = await PholySmokeFixture.start();
     final checks = <String>[];
     final screenshots = <String>[];
+    final screenshotDetails = <Map<String, Object?>>[];
     final external = await getExternalStorageDirectory();
     final evidence = await Directory('${external!.path}/pholy-smoke-evidence').create(recursive: true);
     ProviderContainer? container;
     bool surfaceConverted = false;
     bool completed = false;
-
-    Future<void> capture(String name) async {
-      await _hideKeyboard(tester);
-      if (!surfaceConverted) {
-        await binding.convertFlutterSurfaceToImage();
-        surfaceConverted = true;
-      }
-      await tester.pump(const Duration(milliseconds: 250));
-      final bytes = await binding.takeScreenshot(name);
-      await File('${evidence.path}/$name.png').writeAsBytes(bytes, flush: true);
-      screenshots.add('$name.png');
-    }
+    bool teardownCompleted = false;
+    String? teardownFailure;
+    Size? logicalSurfaceSize;
 
     Future<void> saveEvidence() async {
       final report = <String, dynamic>{
-        'passed': completed,
+        'passed': completed && teardownCompleted && teardownFailure == null && binding.failureMethodsDetails.isEmpty,
+        'flowCompleted': completed,
+        'teardownCompleted': teardownCompleted,
+        'teardownFailure': teardownFailure,
+        'frameworkFailureCount': binding.failureMethodsDetails.length,
         'applicationId': package.packageName,
         'appVersion': '${package.version}+${package.buildNumber}',
         'fixtureUrl': PholySmokeFixture.baseUrl,
         'checks': checks,
         'screenshots': screenshots,
+        'screenshotDetails': screenshotDetails,
         ...fixture.evidence,
         'notCovered': [
           'A real PHOLY account or production data',
@@ -113,22 +110,91 @@ void main() {
       // screenshot payload intact for the extended driver's onScreenshot hook.
       binding.reportData ??= <String, dynamic>{};
       binding.reportData!['pholySmoke'] = report;
-      await File(
-        '${evidence.path}/result.json',
-      ).writeAsString(const JsonEncoder.withIndent('  ').convert(report), flush: true);
+      final pendingReport = File('${evidence.path}/result.json.tmp');
+      await pendingReport.writeAsString(const JsonEncoder.withIndent('  ').convert(report), flush: true);
+      await pendingReport.rename('${evidence.path}/result.json');
+    }
+
+    Future<void> capture(String name, {Duration timeout = const Duration(seconds: 20)}) async {
+      final nativeSize = tester.view.physicalSize;
+      final logicalSize = logicalSurfaceSize ?? nativeSize / tester.view.devicePixelRatio;
+      final detail = <String, Object?>{
+        'file': '$name.png',
+        'source': 'native Android Flutter surface',
+        'layout': logicalSurfaceSize == null ? 'native device' : 'simulated logical layout fitted to native surface',
+        'logicalWidth': logicalSize.width,
+        'logicalHeight': logicalSize.height,
+        'nativePhysicalWidth': nativeSize.width,
+        'nativePhysicalHeight': nativeSize.height,
+        'nativeDevicePixelRatio': tester.view.devicePixelRatio,
+        'mediaQueryMetrics': 'native device',
+        'captureTimeoutSeconds': timeout.inSeconds,
+        'status': 'started',
+      };
+      screenshotDetails.add(detail);
+      // Persist completed checks before requesting a screenshot, so the host
+      // can retain progress even if the emulator or graphics backend stops.
+      await saveEvidence();
+      debugPrint('PHOLY_SMOKE_PROGRESS capture=$name checks=${checks.length} screenshots=${screenshots.length}');
+      try {
+        await _hideKeyboard(tester);
+        if (!surfaceConverted) {
+          await binding.convertFlutterSurfaceToImage().timeout(timeout);
+          surfaceConverted = true;
+        }
+        await tester.pump(const Duration(milliseconds: 250));
+        final bytes = await binding.takeScreenshot(name).timeout(timeout);
+        expect(bytes.length, greaterThanOrEqualTo(24), reason: 'A complete PNG header is required for $name');
+        expect(bytes.take(8), orderedEquals([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        final header = ByteData.sublistView(Uint8List.fromList(bytes));
+        detail['pngWidth'] = header.getUint32(16);
+        detail['pngHeight'] = header.getUint32(20);
+        await File('${evidence.path}/$name.png').writeAsBytes(bytes, flush: true);
+        screenshots.add('$name.png');
+        detail['status'] = 'complete';
+        await saveEvidence();
+      } catch (error) {
+        detail['status'] = 'failed';
+        detail['failure'] = error.toString();
+        await saveEvidence();
+        rethrow;
+      }
     }
 
     addTearDown(() async {
-      await saveEvidence();
-      if (container case final current?) {
-        current.read(websocketProvider.notifier).disconnect();
-        await current.read(backgroundSyncProvider).cancel();
+      // Failed widget tests retain their tree until binding.postTest. Capture
+      // it before closing the fixture and before flutter drive exits
+      // the app; the host's later screenshot would only show the launcher.
+      try {
+        try {
+          if (!completed && container != null) {
+            try {
+              await capture('99-failure', timeout: const Duration(seconds: 5)).timeout(const Duration(seconds: 10));
+            } catch (_) {
+              debugPrint('PHOLY_SMOKE_FAILURE_SCREENSHOT_UNAVAILABLE');
+            }
+          }
+          // On success Flutter has already unmounted ProviderScope before
+          // addTearDown. Its providers own their socket/sync disposal; reading
+          // that disposed container here is invalid and duplicates cleanup.
+          await BackgroundWorkerFgService(BackgroundWorkerFgHostApi()).disable();
+          await fixture.close();
+          await workerManagerPatch.dispose();
+        } finally {
+          await binding.setSurfaceSize(null);
+          logicalSurfaceSize = null;
+        }
+        teardownCompleted = true;
+        await saveEvidence();
+      } catch (error) {
+        teardownCompleted = false;
+        teardownFailure = error.toString();
+        // Update reportData before its disk write. Even a failed evidence write
+        // must not leave a true result for integrationDriver, whose SDK result
+        // does not include errors thrown by test_api's addTearDown callbacks.
+        await saveEvidence();
+        rethrow;
       }
-      await BackgroundWorkerFgService(BackgroundWorkerFgHostApi()).disable();
-      await fixture.close();
-      await workerManagerPatch.dispose();
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
     });
 
     await EasyLocalization.ensureInitialized();
@@ -173,11 +239,35 @@ void main() {
     expect(db_store.Store.get(StoreKey.serverEndpoint), '${PholySmokeFixture.baseUrl}/api');
     expect(find.byType(TextFormField), findsNWidgets(2), reason: 'The normal login must not ask for a server URL');
     checks.add('Automatic PHOLY endpoint discovery; only email/password fields');
+    await tester.element(find.byType(LoginForm)).setLocale(const Locale('de'));
+    await _until(
+      tester,
+      () =>
+          Localizations.localeOf(tester.element(find.byType(LoginForm))).languageCode == 'de' &&
+          find.text('Deine Fotos.\nDeine Erinnerungen.').evaluate().isNotEmpty &&
+          find.byType(TextFormField).evaluate().length == 2,
+      'German PHOLY login rendering',
+    );
+    await capture('01-login-de');
+    await tester.element(find.byType(LoginForm)).setLocale(const Locale('en'));
+    await _until(
+      tester,
+      () =>
+          Localizations.localeOf(tester.element(find.byType(LoginForm))).languageCode == 'en' &&
+          find.text('Your photos.\nYour memories.').evaluate().isNotEmpty &&
+          find.byType(TextFormField).evaluate().length == 2,
+      'English PHOLY login restored for interaction checks',
+    );
     await capture('01-login-light');
 
     // Empty fields are rejected before any request reaches the server.
     final loginLabel = StaticTranslations.instance.login;
-    await _tap(tester, find.text(loginLabel).last);
+    final loginButton = find.descendant(
+      of: find.byType(LoginForm),
+      matching: find.widgetWithText(ElevatedButton, loginLabel),
+    );
+    _expectLoginValues(tester, email: '', password: '');
+    await _tap(tester, loginButton);
     expect(find.text(StaticTranslations.instance.login_form_err_invalid_email), findsOneWidget);
     expect(find.text(StaticTranslations.instance.password_required), findsOneWidget);
     expect(fixture.loginAttempts, 0);
@@ -205,18 +295,32 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(0), PholySmokeFixture.email);
     await tester.enterText(find.byType(TextFormField).at(1), 'wrong-synthetic-password');
     await _hideKeyboard(tester);
-    await _tap(tester, find.text(loginLabel).last);
+    _expectLoginValues(tester, email: PholySmokeFixture.email, password: 'wrong-synthetic-password');
+    await _tap(tester, loginButton);
     await _until(tester, () => fixture.loginAttempts == 1, 'wrong-password HTTP response');
-    await tester.pump(const Duration(milliseconds: 700));
+    await _until(
+      tester,
+      () => loginButton.evaluate().length == 1 && tester.widget<ElevatedButton>(loginButton).onPressed != null,
+      'login form completes the rejected request and enables its submit button',
+    );
     expect(providers.read(authProvider).isAuthenticated, isFalse);
     expect(find.byType(LoginForm), findsOneWidget);
     checks.add('Wrong password rejected without an authenticated session');
 
     await tester.enterText(find.byType(TextFormField).at(1), PholySmokeFixture.password);
     await _hideKeyboard(tester);
-    await _tap(tester, find.text(loginLabel).last);
-    await _until(tester, () => find.text('Later').evaluate().isNotEmpty, 'PHOLY permission introduction');
+    _expectLoginValues(tester, email: PholySmokeFixture.email, password: PholySmokeFixture.password);
+    await _tap(tester, loginButton);
+    await _until(tester, () => fixture.loginAttempts >= 2, 'second login HTTP request');
+    expect(fixture.loginAttempts, 2, reason: 'Exactly one rejected and one corrected login must be sent');
+    expect(
+      fixture.successfulLogins,
+      1,
+      reason: 'The intended synthetic credentials must be accepted; inspect the value-free login diagnostics',
+    );
+    await _until(tester, () => providers.read(authProvider).isAuthenticated, 'authenticated application session');
     expect(providers.read(authProvider).userId, PholySmokeFixture.userId);
+    await _until(tester, () => find.text('Later').evaluate().isNotEmpty, 'PHOLY permission introduction');
     await capture('03-introduction');
     await _tap(tester, find.text('Later'));
     await _until(tester, () => find.byType(TabShellPage).evaluate().isNotEmpty, 'authenticated library');
@@ -227,16 +331,36 @@ void main() {
 
     // Observe real Drift insertion and an actual visible thumbnail after the
     // standard isolate-based Immich sync, rather than seeding a UI provider.
+    // Join the login flow's local sync first so its remote sync cannot start
+    // later and overlap the fresh sync requested after the upload below.
+    await providers.read(backgroundSyncProvider).syncLocal(full: true).timeout(const Duration(seconds: 90));
     expect(await providers.read(backgroundSyncProvider).syncRemote().timeout(const Duration(seconds: 90)), isTrue);
     final firstAsset = await providers.read(assetServiceProvider).getRemoteAsset(PholySmokeFixture.photoId);
     expect(firstAsset?.id, PholySmokeFixture.photoId);
     await _until(tester, () => _photoTile(PholySmokeFixture.photoId).evaluate().isNotEmpty, 'synced gallery thumbnail');
+    // The existing first-launch release notes are a modal route. A thumbnail
+    // can be built behind them, so close their real action before tapping it.
+    final releaseNotes = find.widgetWithText(Dialog, StaticTranslations.instance.whats_new);
+    if (releaseNotes.evaluate().isNotEmpty) {
+      await _tap(
+        tester,
+        find.descendant(of: releaseNotes, matching: find.widgetWithText(TextButton, StaticTranslations.instance.skip)),
+      );
+      await _until(tester, () => releaseNotes.evaluate().isEmpty, 'dismissed first-launch release notes');
+      checks.add('Existing first-launch release notes dismissed through the visible Skip action');
+    }
+    await tester.ensureVisible(_photoTile(PholySmokeFixture.photoId).first);
+    await _until(
+      tester,
+      () => _photoTile(PholySmokeFixture.photoId).hitTestable().evaluate().isNotEmpty,
+      'visible, unobscured gallery thumbnail',
+    );
     expect(fixture.syncRequests, greaterThan(0));
     expect(fixture.syncAcks, greaterThan(0));
     await capture('04-gallery');
     checks.add('Real remote sync stream acknowledged and stored in Drift; gallery thumbnail rendered');
 
-    await _tap(tester, _photoTile(PholySmokeFixture.photoId).first);
+    await _tap(tester, _photoTile(PholySmokeFixture.photoId).hitTestable().first);
     await _until(
       tester,
       () =>
@@ -254,7 +378,12 @@ void main() {
     // The exact application upload path sends a multipart body through the
     // native HTTP client, using a generated image in the test app's own storage.
     final syntheticFile = File('${(await getApplicationSupportDirectory()).path}/pholy-synthetic-upload.png');
-    await syntheticFile.writeAsBytes(fixture.photo, flush: true);
+    expect(
+      fixture.uploadPhotoChecksum,
+      isNot(fixture.photoChecksum),
+      reason: 'A newly created asset must contain different bytes from the existing photo',
+    );
+    await syntheticFile.writeAsBytes(fixture.uploadPhoto, flush: true);
     final uploadedIds = <String>[];
     final uploadErrors = <String>[];
     await providers
@@ -270,14 +399,36 @@ void main() {
     expect(fixture.uploadRequests, 1);
     expect(fixture.uploadIncludedAssetData, isTrue);
     expect(fixture.uploadIncludedDates, isTrue);
-    expect(fixture.uploadedBytes, greaterThan(fixture.photo.length));
-    expect(await providers.read(backgroundSyncProvider).syncRemote().timeout(const Duration(seconds: 90)), isTrue);
-    expect(
-      (await providers.read(assetServiceProvider).getRemoteAsset(PholySmokeFixture.uploadedPhotoId))?.id,
-      PholySmokeFixture.uploadedPhotoId,
+    expect(fixture.uploadMatchesExpectedPhoto, isTrue);
+    expect(fixture.uploadedBytes, greaterThan(fixture.uploadPhoto.length));
+    // Every pass must succeed. Replaying the fixture's complete stream twice
+    // verifies that the new asset does not replace the existing checksum row
+    // or invalidate the album thumbnail; this is not a retry after failure.
+    for (var pass = 0; pass < 2; pass++) {
+      expect(
+        await providers.read(backgroundSyncProvider).syncRemote().timeout(const Duration(seconds: 90)),
+        isTrue,
+        reason: 'Post-upload sync pass ${pass + 1} must complete without a database/stream error',
+      );
+      for (final (id, checksum) in [
+        (PholySmokeFixture.photoId, fixture.photoChecksum),
+        (PholySmokeFixture.uploadedPhotoId, fixture.uploadPhotoChecksum),
+      ]) {
+        final asset = await providers.read(assetServiceProvider).getRemoteAsset(id);
+        expect(asset?.id, id);
+        expect(asset?.checksum, checksum);
+      }
+    }
+    await _until(
+      tester,
+      () => _photoTile(PholySmokeFixture.uploadedPhotoId).hitTestable().evaluate().isNotEmpty,
+      'uploaded image visible in the real gallery after sync',
     );
     await syntheticFile.delete();
-    checks.add('Real multipart image upload, timestamps and file bytes; uploaded asset appears through a new sync');
+    checks.add(
+      'Real multipart upload with distinct PNG bytes and dates; both original and uploaded assets survive repeated sync and the upload appears in the gallery',
+    );
+    await capture('05-uploaded-gallery');
 
     // Open the same asset via an album: it must use the separate album scope,
     // and never reuse the private draft or the original Immich activity API.
@@ -398,6 +549,7 @@ void main() {
 
     // Exercise only the fixture author's permitted actions.
     final ownMenu = find.byKey(const ValueKey('pholy-comment-menu-${PholySmokeFixture.ownCommentId}'));
+    await _scrollDiscussionTo(tester, ownMenu);
     await _tap(tester, ownMenu);
     await _tap(tester, find.text('Edit').last);
     expect(_draftValue(tester), 'My synthetic public comment');
@@ -412,6 +564,7 @@ void main() {
     );
     await _readyComposer(tester);
     await _hideKeyboard(tester);
+    await _scrollDiscussionTo(tester, ownMenu);
     await _tap(tester, ownMenu);
     await _tap(tester, find.text('Delete').last);
     await _until(tester, () => find.byType(AlertDialog).evaluate().isNotEmpty, 'delete confirmation');
@@ -425,6 +578,7 @@ void main() {
       ),
       'allowed comment deletion',
     );
+    await _readyComposer(tester);
     await _until(tester, () => ownMenu.evaluate().isEmpty, 'deleted comment disappears');
     checks.add('Author can edit and delete after confirmation; other-author controls are absent');
     await capture('08-community-comments');
@@ -438,23 +592,31 @@ void main() {
       () => Theme.of(tester.element(find.byType(CommunityPhotoViewerPage))).brightness == Brightness.dark,
       'dark theme',
     );
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(360, 740);
+    // The live integration binding fits logical layouts into the unchanged
+    // Android surface. Faking physicalSize instead mismatches the native
+    // ImageView and can leave its screenshot frame acquisition waiting forever.
+    logicalSurfaceSize = const Size(360, 740);
+    await binding.setSurfaceSize(logicalSurfaceSize);
     await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getSize(find.byType(CommunityPhotoViewerPage)), logicalSurfaceSize);
     expect(_draftValue(tester), 'Responsive draft');
     expect(tester.takeException(), isNull, reason: 'No overflow at a narrow phone size');
+    await _readyDarkCommentColors(tester);
     await capture('09-community-dark-small');
-    tester.view.physicalSize = const Size(1000, 700);
+    logicalSurfaceSize = const Size(1000, 700);
+    await binding.setSurfaceSize(logicalSurfaceSize);
     await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getSize(find.byType(CommunityPhotoViewerPage)), logicalSurfaceSize);
     expect(_draftValue(tester), 'Responsive draft');
     expect(tester.takeException(), isNull, reason: 'No overflow in the wide split view');
+    await _readyDarkCommentColors(tester);
     await capture('10-community-dark-wide');
-    tester.view.resetPhysicalSize();
-    tester.view.resetDevicePixelRatio();
+    await binding.setSurfaceSize(null);
+    logicalSurfaceSize = null;
     await providers.read(settingsProvider).write(SettingsKey.themeMode, ThemeMode.light);
     await tester.pump(const Duration(milliseconds: 400));
     checks.add(
-      'Dark theme, 360 px phone and 1000 px split view render without overflow; draft survives layout changes',
+      'Dark theme and simulated logical layouts at 360×740 and 1000×700 render without overflow on the native surface; draft survives layout changes',
     );
 
     // Switching photos changes the discussion and clears its previous draft.
@@ -509,6 +671,56 @@ void main() {
 
 Finder _photoTile(String id) => find.byWidgetPredicate((widget) => widget is ThumbnailTile && widget.asset?.id == id);
 
+Future<void> _readyDarkCommentColors(WidgetTester tester) async {
+  final toggle = find.byKey(const ValueKey('pholy-comments-toggle'));
+  final send = find.byKey(const ValueKey('pholy-comment-send'));
+  Color? renderedIconColor(Finder control) {
+    final icon = find.descendant(of: control, matching: find.byType(Icon));
+    final glyph = find.descendant(of: icon, matching: find.byType(RichText));
+    return glyph.evaluate().length == 1 ? tester.widget<RichText>(glyph).text.style?.color : null;
+  }
+
+  ({Color primary, Color onPrimary})? previousColors;
+  var stableFrames = 0;
+  await _until(
+    tester,
+    () {
+      final theme = Theme.of(tester.element(find.byType(CommunityPhotoViewerPage)));
+      final colors = (primary: theme.colorScheme.primary, onPrimary: theme.colorScheme.onPrimary);
+      // Theme.brightness changes before animated control colors necessarily
+      // finish. Check the actual painted icon glyphs, with an enabled draft.
+      final ready =
+          theme.brightness == Brightness.dark &&
+          send.evaluate().length == 1 &&
+          tester.widget<IconButton>(send).onPressed != null &&
+          renderedIconColor(toggle) == colors.primary &&
+          renderedIconColor(send) == colors.onPrimary;
+      stableFrames = ready ? (colors == previousColors ? stableFrames + 1 : 1) : 0;
+      previousColors = ready ? colors : null;
+      return stableFrames >= 2;
+    },
+    'settled rendered dark comment-control colors',
+    timeout: const Duration(seconds: 5),
+  );
+}
+
+Future<void> _scrollDiscussionTo(WidgetTester tester, Finder target) async {
+  final list = find.descendant(of: find.byType(PholyPhotoComments), matching: find.byType(ListView));
+  final scrollable = find.descendant(of: list, matching: find.byType(Scrollable));
+  await _until(tester, () => scrollable.evaluate().length == 1, 'photo discussion list scrollable');
+  // Replies are inserted before later root comments. Their menu may therefore
+  // not have an element yet. Scroll the actual discussion list to build it;
+  // the photo PageView and the composer's separate Scrollables stay untouched.
+  await tester.scrollUntilVisible(
+    target,
+    140,
+    scrollable: scrollable,
+    maxScrolls: 12,
+    duration: const Duration(milliseconds: 100),
+    continuous: true,
+  );
+}
+
 Future<void> _until(
   WidgetTester tester,
   bool Function() condition,
@@ -522,21 +734,66 @@ Future<void> _until(
     }
     await tester.pump(const Duration(milliseconds: 100));
   }
-  await tester.pump(const Duration(milliseconds: 100));
 }
 
 Future<void> _tap(WidgetTester tester, Finder finder) async {
   await _until(tester, () => finder.evaluate().isNotEmpty, 'tap target $finder');
-  await tester.ensureVisible(finder);
-  await tester.pump(const Duration(milliseconds: 100));
-  await tester.tap(finder);
-  await tester.pump(const Duration(milliseconds: 200));
+  final timer = Stopwatch()..start();
+  ({Rect rect, double bottomInset})? previousGeometry;
+  var stableSamples = 0;
+  while (timer.elapsed < const Duration(seconds: 45)) {
+    // Native IME animations can arrive after TextInput.hide completes. Observe
+    // the actual target and viewport after each frame, rather than checking a
+    // finder, pumping another unchecked frame and resolving it again in tap().
+    final target = finder.hitTestable();
+    final matches = target.evaluate().length;
+    if (matches == 1) {
+      final geometry = (rect: tester.getRect(target), bottomInset: tester.view.viewInsets.bottom);
+      stableSamples = geometry == previousGeometry ? stableSamples + 1 : 1;
+      previousGeometry = geometry;
+      if (stableSamples >= 3) {
+        // No further pump or asynchronous finder lookup before this single
+        // gesture. The coordinate belongs to the currently hit-testable target.
+        await tester.tapAt(geometry.rect.center);
+        await tester.pump(const Duration(milliseconds: 200));
+        return;
+      }
+    } else {
+      stableSamples = 0;
+      previousGeometry = null;
+      if (finder.evaluate().length == 1) {
+        await tester.ensureVisible(finder);
+      }
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  fail('Timed out waiting for a stable, unobscured tap target $finder');
 }
 
 Future<void> _hideKeyboard(WidgetTester tester) async {
   FocusManager.instance.primaryFocus?.unfocus();
+  // IntegrationTest keeps the real IME, so TestTextInput.onCleared does not
+  // reset this cached state. Without the reset, enterText on the same field
+  // skips requestKeyboard and sends its value to a closed TextInputConnection.
+  tester.binding.focusedEditable = null;
   await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   await tester.pump(const Duration(milliseconds: 350));
+}
+
+void _expectLoginValues(WidgetTester tester, {required String email, required String password}) {
+  final fields = find.byType(TextFormField);
+  expect(fields, findsNWidgets(2));
+  // Compare booleans so a failing assertion never prints credential contents.
+  expect(
+    tester.widget<TextFormField>(fields.at(0)).controller?.text == email,
+    isTrue,
+    reason: 'The email controller must contain the intended synthetic value before login',
+  );
+  expect(
+    tester.widget<TextFormField>(fields.at(1)).controller?.text == password,
+    isTrue,
+    reason: 'The password controller must contain the intended synthetic value before login',
+  );
 }
 
 Future<void> _back(WidgetTester tester) async {

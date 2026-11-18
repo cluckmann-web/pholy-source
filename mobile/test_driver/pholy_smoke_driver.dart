@@ -29,20 +29,38 @@ Future<void> main() async {
       return true;
     },
     responseDataCallback: (Map<String, dynamic>? data) async {
+      final smoke = data?['pholySmoke'];
+      final harnessPassed =
+          smoke is Map<String, dynamic> &&
+          smoke['passed'] == true &&
+          smoke['flowCompleted'] == true &&
+          smoke['teardownCompleted'] == true &&
+          smoke['teardownFailure'] == null &&
+          smoke['frameworkFailureCount'] == 0;
       final report = <String, dynamic>{
         ...?data,
         // Do not duplicate binary screenshot arrays in the readable report.
         'screenshots': screenshots,
-        'suiteStatus': 'The flutter drive exit code determines overall success.',
+        'suiteStatus': harnessPassed
+            ? 'PHOLY flow and teardown completed; the runner also verifies the native Flutter suite summary.'
+            : 'PHOLY flow or teardown failed, incomplete or missing; the driver fails.',
       };
       final file = File('${directory.path}/result.json');
       await file.writeAsString(const JsonEncoder.withIndent('  ').convert(report), flush: true);
       stdout.writeln('PHOLY_SMOKE_REPORT=${file.absolute.path}');
-      final smoke = data?['pholySmoke'];
       if (smoke is Map<String, dynamic>) {
         final checks = smoke['checks'];
         stdout.writeln('PHOLY_SMOKE_CHECKS=${checks is List ? checks.length : 0}');
-        stdout.writeln('PHOLY_SMOKE_FLOW_COMPLETED=${smoke['passed'] == true}');
+        stdout.writeln('PHOLY_SMOKE_FLOW_COMPLETED=${smoke['flowCompleted'] == true}');
+        stdout.writeln('PHOLY_SMOKE_TEARDOWN_COMPLETED=${smoke['teardownCompleted'] == true}');
+      }
+      // integrationDriver calls exit(0) immediately after this callback when
+      // its SDK result says success. Require the app's own terminal check here
+      // and teardown, so a timeout or cleanup error cannot produce a green
+      // driver. The CI runner separately checks the native suite's summary to
+      // catch later binding.postTest/tearDownAll failures omitted by this SDK.
+      if (!harnessPassed) {
+        throw StateError('PHOLY smoke flow or teardown did not complete successfully; inspect ${file.absolute.path}');
       }
     },
   );

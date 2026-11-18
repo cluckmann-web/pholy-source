@@ -501,7 +501,12 @@ Server-/Passkey-Defines und Versionsargumente sind dabei zu übergeben.
 
 **iOS benötigt `--build-name=3.4.1 --build-number=3040201`.** Der Android-
 Versionsname `3.4.1-pholy-mobile.1` darf nicht unverändert als
-`CFBundleShortVersionString` übernommen werden. Gemeinsamer Dart-Code,
+`CFBundleShortVersionString` übernommen werden. Widget und Share Extension
+verwenden eigene Xcode-Versionswerte: `MARKETING_VERSION=3.4.1` und
+`CURRENT_PROJECT_VERSION=3040201` sind für Debug, Release und Profile
+gesetzt. Bei Versionswechseln die numerischen Flutter-Argumente der Hauptapp
+und diese Werte beider Erweiterungen gemeinsam aktualisieren und vor dem
+Archivieren abgleichen. Gemeinsamer Dart-Code,
 native Projektanpassungen und dokumentierte Befehle sind noch kein Beleg
 für einen erfolgreichen iOS-Build oder Gerätestest.
 
@@ -570,10 +575,12 @@ Danach erst den dedizierten x86_64-Emulator starten und den vorhandenen
 Hosttreiber verwenden:
 
 ```bash
-flutter drive --no-pub -d emulator-5554 \
+set -o pipefail
+flutter --verbose drive --no-pub -d emulator-5554 \
   --driver=test_driver/pholy_smoke_driver.dart \
   --target=integration_test/pholy_mobile_smoke_test.dart \
-  --use-application-binary=build/app/outputs/flutter-apk/app-debug.apk
+  --use-application-binary=build/app/outputs/flutter-apk/app-debug.apk \
+  2>&1 | tee build/pholy-smoke-drive.log
 ```
 
 `--use-application-binary` verwendet die bereits gebaute APK und kompiliert
@@ -590,8 +597,23 @@ Ergebnisdatei und Screenshots werden im externen App-Verzeichnis unter
 `$FLUTTER_TEST_OUTPUTS_DIR/pholy-smoke-evidence` auf dem Buildrechner ab;
 ohne diese Variable ist es `build/pholy-smoke-evidence`. Mit
 `PHOLY_SMOKE_OUTPUT_DIR` lässt sich das Zielverzeichnis ausdrücklich setzen.
-Auch bei einem Fehler kann ein Teilbericht entstehen; für den gesamten
-Testlauf ist der Exit-Code von `flutter drive` maßgeblich.
+Auch bei einem Fehler kann ein Teilbericht entstehen. Ein Erfolg verlangt
+`passed`, `flowCompleted` und `teardownCompleted` jeweils als `true`,
+`teardownFailure: null` und `frameworkFailureCount: 0`. Der Hosttreiber
+verwirft fehlende oder fehlerhafte Abschlüsse. Zusätzlich muss das native
+Flutter-Protokoll nach allen Teardowns eine Zeile
+`I/flutter … All tests passed!` enthalten und darf kein
+`Some tests failed.` melden. Der Exit-Code allein und die ähnlich lautende
+Hostdriver-Zeile `All tests passed.` reichen beim gepinnten SDK nicht aus.
+Der isolierte CI-Runner prüft diese Bedingungen ausdrücklich.
+
+Für den dokumentierten KVM-Emulatorlauf verwendet der Runner außerdem
+`--no-dds --no-enable-impeller --enable-software-rendering`. Diese Optionen
+betreffen ausschließlich die synthetische Debug-Prüfung. Der getrennte
+Installations- und Startnachweis der signierten Release-APK verwendet den
+regulären App-Renderer ohne diese Overrides. Logische Testgrößen werden
+über `setSurfaceSize` auf die unveränderte native Android-Surface
+eingepasst; `screenshotDetails` hält beide Größen und die PNG-Auflösung fest.
 
 Nicht abgedeckt sind echte Mailzustellung, produktive Benutzerkonten,
 reale Foto-Berechtigungsdialoge, vom
