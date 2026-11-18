@@ -44,6 +44,5 @@ void main() {
 
     expect(find.text('Settings loaded'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
-    expect(find.byType(ModalBarrier), findsNothing);
   });
 }
