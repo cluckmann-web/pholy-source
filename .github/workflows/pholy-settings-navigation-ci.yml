@@ -26,22 +26,37 @@ jobs:
           test "$(git -C "$RUNNER_TEMP/pholy-flutter" rev-parse HEAD)" = d3b14c876900e553bc736ca19295fc09e3853e8e
           echo "$RUNNER_TEMP/pholy-flutter/bin" >> "$GITHUB_PATH"
 
-      - name: Resolve locked dependencies
-        working-directory: mobile
+      - name: Test the real helper with a minimal Flutter harness
+        shell: bash
         env:
           CI: 'true'
           FLUTTER_SUPPRESS_ANALYTICS: 'true'
           DART_SUPPRESS_ANALYTICS: 'true'
         run: |
-          flutter --version
-          flutter pub get --enforce-lockfile
+          set -euo pipefail
+          flutter create --project-name pholy_navigation_regression --platforms=linux --no-pub "$RUNNER_TEMP/nav-test"
+          cp mobile/lib/utils/dialog_navigation.dart "$RUNNER_TEMP/nav-test/lib/dialog_navigation.dart"
+          sed 's|package:immich_mobile/utils/dialog_navigation.dart|package:pholy_navigation_regression/dialog_navigation.dart|' \
+            mobile/test/pholy/dialog_navigation_test.dart > "$RUNNER_TEMP/nav-test/test/dialog_navigation_test.dart"
+          cd "$RUNNER_TEMP/nav-test"
+          flutter pub get
+          flutter test test/dialog_navigation_test.dart
 
-      - name: Verify profile-dialog routing regression
-        working-directory: mobile
-        env:
-          CI: 'true'
-          FLUTTER_SUPPRESS_ANALYTICS: 'true'
-          DART_SUPPRESS_ANALYTICS: 'true'
+      - name: Check all three profile menu routes and Dart formatting
+        shell: bash
         run: |
-          flutter test --no-pub test/pholy/dialog_navigation_test.dart
-          dart format --output=none --set-exit-if-changed lib/utils/dialog_navigation.dart test/pholy/dialog_navigation_test.dart
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart').read_text()
+          for line in (
+            'navigateFromProfileMenu(const SettingsRoute())',
+            'navigateFromProfileMenu(SettingsSubRoute(section: SettingSection.freeUpSpace))',
+            'navigateFromProfileMenu(const AppLogRoute())',
+            'dismissDialogAndNavigate(context,',
+          ):
+            assert line in source, line
+          assert '() => context.pushRoute(const SettingsRoute())' not in source
+          PY
+          "$RUNNER_TEMP/pholy-flutter/bin/dart" format --output=none --set-exit-if-changed \
+            mobile/lib/utils/dialog_navigation.dart mobile/test/pholy/dialog_navigation_test.dart
