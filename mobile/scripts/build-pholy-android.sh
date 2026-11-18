@@ -37,6 +37,6 @@ flutter build apk --release --split-per-abi \
   --target-platform android-arm64,android-x64 \
   --dart-define=PHOLY_SERVER_URL=https://pholy.de \
   --dart-define=PHOLY_ENABLE_PASSKEYS=false \
-  --build-name=3.4.1-pholy-mobile.2 --build-number=3040202
+  --build-name=3.4.1-pholy-mobile.3 --build-number=3040203
 
 printf '\nSigned APKs: %s/build/app/outputs/flutter-apk/\n' "$mobile_dir"

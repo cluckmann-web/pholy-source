@@ -1,0 +1,430 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-only
+# Only the isolated GitHub Actions branch may run this synthetic Android job.
+set -euo pipefail
+
+[[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_OS:-}" == Linux ]]
+[[ "${RUNNER_ENVIRONMENT:-}" == github-hosted ]]
+[[ "${GITHUB_REF:-}" == refs/heads/pholy-mobile-native-test ]]
+[[ "${GITHUB_EVENT_NAME:-}" == push ]]
+[[ "$(uname -m)" == x86_64 ]]
+: "${GITHUB_WORKSPACE:?A disposable GitHub-hosted checkout is required}"
+: "${RUNNER_TEMP:?A disposable GitHub-hosted temporary directory is required}"
+
+phase=${1:?Expected setup, prepare, build or run}
+case "$phase" in setup|prepare|build|run) ;; *) exit 2 ;; esac
+repo_dir=$GITHUB_WORKSPACE
+tool_dir="$RUNNER_TEMP/pholy-native-ci"
+evidence_dir="$RUNNER_TEMP/pholy-native-evidence"
+mkdir -p "$tool_dir" "$evidence_dir"
+
+export CI=true FLUTTER_SUPPRESS_ANALYTICS=true DART_SUPPRESS_ANALYTICS=true
+export RUSTUP_TOOLCHAIN=1.99.1 CARGO_BUILD_JOBS=2
+export RUSTUP_HOME="$tool_dir/rustup" CARGO_HOME="$tool_dir/cargo"
+export JAVA_HOME="$tool_dir/jdk21"
+export GRADLE_USER_HOME="$tool_dir/gradle" PUB_CACHE="$tool_dir/pub-cache"
+export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export ANDROID_AVD_HOME="$tool_dir/avd"
+export PHOLY_SMOKE_OUTPUT_DIR="$evidence_dir/driver"
+export PATH="$tool_dir/flutter/bin:$tool_dir/node/bin:$tool_dir/openapi-cli/node_modules/.bin:$JAVA_HOME/bin:$CARGO_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+export CC=clang-16 CXX=clang++-16
+
+flutter_version=${PHOLY_FLUTTER_VERSION:-3.47.2}
+flutter_revision=${PHOLY_FLUTTER_REVISION:-d3b14c876900e553bc736ca19295fc09e3853e8e}
+flutter_engine=${PHOLY_FLUTTER_ENGINE:-a804b261645ef8c13eb3d5c44a5c2fb0340c5539}
+node_version=${PHOLY_NODE_VERSION:-24.22.1}
+android_image=${PHOLY_ANDROID_IMAGE:-system-images;android-35;google_apis;x86_64}
+apk="$repo_dir/mobile/build/app/outputs/flutter-apk/app-debug.apk"
+emulator_pid=
+logcat_pid=
+evidence_collector_pid=
+drive_pid=
+diagnostic_pid=
+driver_connected=false
+runtime_state=not-started
+
+mark_runtime_state() {
+  runtime_state=$1
+  printf '%s\n' "$runtime_state" > "$evidence_dir/runtime-phase.txt.tmp"
+  mv "$evidence_dir/runtime-phase.txt.tmp" "$evidence_dir/runtime-phase.txt"
+}
+
+write_phase_result() {
+  python3 - "$phase" "$1" "$evidence_dir" "$runtime_state" "$driver_connected" "$2" <<'PY'
+from datetime import datetime, timezone
+from pathlib import Path
+import json, os, sys
+phase, code, destination, runtime_state, connected, cleanup = sys.argv[1:]
+result = Path(destination, phase + '-result.json')
+temporary = result.with_suffix('.json.tmp')
+temporary.write_text(json.dumps({
+    'phase': phase, 'runtime_state': runtime_state, 'exit_code': int(code),
+    'recorded_at_utc': datetime.now(timezone.utc).isoformat(),
+    'cleanup_completed': cleanup == 'true',
+    'source_commit': os.environ.get('GITHUB_SHA'),
+    'run_id': os.environ.get('GITHUB_RUN_ID'),
+    'driver_connection_confirmed': connected == 'true',
+    'scope': 'Synthetic debug APK; loopback fixture; no production account or real media',
+}, indent=2) + '\n')
+temporary.replace(result)
+PY
+}
+
+diagnostic_snapshot() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+  free -m
+  ps -eo pid,ppid,stat,pcpu,pmem,rss,comm --sort=-rss | head -16 || true
+  timeout --kill-after=2s 5 adb devices -l || true
+  timeout --kill-after=2s 5 adb -s emulator-5554 forward --list || true
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell 'getprop sys.boot_completed; getprop init.svc.bootanim; pidof system_server; pidof de.pholy.app.debug; service check activity; service check package' || true
+  timeout --kill-after=2s 5 ss -ltnp || true
+}
+
+finish() {
+  local exit_code=$?
+  trap - EXIT INT TERM
+  set +e
+  # Save the outcome before any cleanup. A stalled ADB operation must not use
+  # up the cancellation grace period before the failure report reaches disk.
+  write_phase_result "$exit_code" false
+  # Drive has a separate process group, including timeout and its Dart children.
+  if [[ -n "$drive_pid" ]]; then kill -TERM -- "-$drive_pid" >/dev/null 2>&1; fi
+  if [[ -n "$diagnostic_pid" ]]; then kill "$diagnostic_pid" >/dev/null 2>&1; fi
+  if [[ -n "$evidence_collector_pid" ]]; then
+    kill "$evidence_collector_pid" >/dev/null 2>&1
+    timeout --kill-after=2s 3 tail --pid="$evidence_collector_pid" -f /dev/null >/dev/null 2>&1
+  fi
+  if [[ -n "$emulator_pid" ]]; then
+    diagnostic_snapshot > "$evidence_dir/final-host-device-state.txt" 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 shell 'getprop sys.boot_completed; getprop init.svc.bootanim; pidof system_server; service check package; service check activity' > "$evidence_dir/final-device-state.txt" 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 logcat -b all -d -t 3000 > "$evidence_dir/final-logcat.txt" 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 exec-out screencap -p > "$evidence_dir/final-screen.png" 2> "$evidence_dir/screencap-error.txt"
+    timeout --kill-after=2s 8 adb -s emulator-5554 pull /sdcard/Android/data/de.pholy.app.debug/files/pholy-smoke-evidence "$evidence_dir/device" > "$evidence_dir/pull-evidence.log" 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 shell am force-stop de.pholy.app.debug >/dev/null 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 emu kill >/dev/null 2>&1
+    kill "$emulator_pid" >/dev/null 2>&1
+    timeout --kill-after=2s 5 tail --pid="$emulator_pid" -f /dev/null >/dev/null 2>&1
+    kill -KILL "$emulator_pid" >/dev/null 2>&1
+  fi
+  if [[ -n "$logcat_pid" ]]; then kill "$logcat_pid" >/dev/null 2>&1; fi
+  if [[ -n "$drive_pid" ]]; then kill -KILL -- "-$drive_pid" >/dev/null 2>&1; fi
+  write_phase_result "$exit_code" true
+  exit "$exit_code"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+download() {
+  curl --fail --location --retry 3 --connect-timeout 20 --max-time 900 "$1" --output "$2"
+}
+
+setup() {
+  sudo apt-get update
+  sudo apt-get install -y --no-install-recommends \
+    ca-certificates curl git unzip xz-utils zip patch acl \
+    build-essential pkg-config python3 clang-16 llvm-16 libclang-16-dev \
+    libsqlite3-dev ninja-build libgl1 libglu1-mesa libpulse0 libx11-6 \
+    libxcb1 libxkbcommon0 libnss3 libvulkan1
+  df -h "$repo_dir" "$RUNNER_TEMP" > "$evidence_dir/disk-before.txt"
+  free -m > "$evidence_dir/memory-before.txt"
+
+  # No TCG fallback: hardware acceleration is the purpose of this runner.
+  [[ -c /dev/kvm ]] || { printf 'This runner has no /dev/kvm.\n' >&2; return 1; }
+  sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+  [[ -r /dev/kvm && -w /dev/kvm ]]
+
+  mkdir -p "$tool_dir/downloads" "$JAVA_HOME" "$tool_dir/node" "$GRADLE_USER_HOME" "$ANDROID_AVD_HOME"
+  local jdk_archive="$tool_dir/downloads/jdk21.tar.gz"
+  download 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.2%2B13/OpenJDK21U-jdk_x64_linux_hotspot_21.0.2_13.tar.gz' "$jdk_archive"
+  printf '%s  %s\n' '454bebb2c9fe48d981341461ffb6bf1017c7b7c6e15c6b0c29b959194ba3aaa5' "$jdk_archive" | sha256sum --check
+  tar -xzf "$jdk_archive" -C "$JAVA_HOME" --strip-components=1
+  [[ -x "$JAVA_HOME/bin/javac" ]]
+  rm "$jdk_archive"
+
+  local node_archive="node-v${node_version}-linux-x64.tar.xz"
+  download "https://nodejs.org/dist/v${node_version}/$node_archive" "$tool_dir/downloads/$node_archive"
+  download "https://nodejs.org/dist/v${node_version}/SHASUMS256.txt" "$tool_dir/downloads/node-SHASUMS256.txt"
+  (
+    cd "$tool_dir/downloads"
+    awk -v file="$node_archive" '$2 == file { print; found=1 } END { if (!found) exit 1 }' node-SHASUMS256.txt | sha256sum --check
+  )
+  tar -xJf "$tool_dir/downloads/$node_archive" -C "$tool_dir/node" --strip-components=1
+  rm "$tool_dir/downloads/$node_archive"
+  [[ "$(node --version)" == "v$node_version" ]]
+  npm install --prefix "$tool_dir/openapi-cli" --no-audit --no-fund @openapitools/openapi-generator-cli@2.42.0
+
+  # Check out the exact SDK release commit instead of depending on a moving
+  # archive-index URL. Flutter then obtains the engine-pinned Dart artifacts.
+  git clone --depth 1 --branch "$flutter_version" https://github.com/flutter/flutter.git "$tool_dir/flutter"
+  [[ "$(git -C "$tool_dir/flutter" rev-parse HEAD)" == "$flutter_revision" ]]
+  [[ "$(cat "$tool_dir/flutter/bin/internal/engine.version")" == "$flutter_engine" ]]
+  # The first invocation bootstraps Dart/tool dependencies and can print progress.
+  flutter --version > "$evidence_dir/flutter-bootstrap.log" 2>&1
+  flutter --version --machine > "$evidence_dir/flutter-version.json"
+  python3 - "$evidence_dir/flutter-version.json" "$flutter_version" "$flutter_revision" "$evidence_dir/flutter-selection.json" <<'PYSDK'
+from pathlib import Path
+import json,sys
+data=json.load(open(sys.argv[1]))
+assert data['frameworkVersion'] == sys.argv[2]
+assert data['frameworkRevision'] == sys.argv[3]
+Path(sys.argv[4]).write_text(json.dumps({
+    'repository': 'https://github.com/flutter/flutter.git',
+    'version': sys.argv[2], 'revision': sys.argv[3],
+    'selection': 'exact release tag plus verified commit and engine hash',
+}, indent=2) + '\n')
+PYSDK
+  # The targeted APK build fetches its needed engine artifacts; avoid eagerly
+  # precaching every Android ABI/build mode on the runner's limited disk.
+
+  # GitHub's Ubuntu image supplies rustup; isolate its downloads and cargo cache.
+  command -v rustup
+  rustup toolchain install 1.99.1 --profile minimal --no-self-update
+  rustup target add --toolchain 1.99.1 x86_64-linux-android
+  cargo --version
+
+  command -v sdkmanager
+  # Avoid the usual yes/SIGPIPE failure under pipefail, while checking sdkmanager.
+  set +o pipefail
+  yes | sdkmanager --licenses > "$evidence_dir/android-licenses.log" 2>&1
+  local sdk_license_exit=${PIPESTATUS[1]}
+  set -o pipefail
+  [[ "$sdk_license_exit" == 0 ]]
+  sdkmanager 'platform-tools' 'emulator' \
+    'platforms;android-33' 'platforms;android-34' 'platforms;android-35' 'platforms;android-36' \
+    'build-tools;35.0.0' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' "$android_image"
+  emulator -accel-check > "$evidence_dir/kvm-check.txt" 2>&1
+
+  cat > "$GRADLE_USER_HOME/gradle.properties" <<'PROPERTIES'
+org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:MaxDirectMemorySize=512m -XX:ActiveProcessorCount=2
+org.gradle.parallel=false
+org.gradle.workers.max=2
+org.gradle.daemon=false
+org.gradle.caching=true
+kotlin.compiler.execution.strategy=in-process
+android.jetifier.ignorelist=(armeabi_v7a|arm64_v8a|x86_64)_(debug|profile|release)-1[.]0[.]0-a804b261645ef8c13eb3d5c44a5c2fb0340c5539[.]jar$
+PROPERTIES
+  {
+    git -C "$repo_dir" rev-parse HEAD
+    javac --version
+    node --version
+    rustc --version
+    clang-16 --version
+    sdkmanager --version
+    emulator -version
+  } > "$evidence_dir/toolchain.txt" 2>&1
+}
+
+prepare() {
+  # ffigen does not honor LIBCLANG_PATH. Restore this host-only selection even on failure.
+  (
+    local config="$repo_dir/native/native_core/ffigen.yaml"
+    local original
+    original=$(mktemp "$tool_dir/ffigen-original.XXXXXX.yaml")
+    cp "$config" "$original"
+    trap 'cp "$original" "$config"; rm -f "$original"' EXIT
+    if grep -q '^llvm-path:' "$config"; then
+      printf 'Review the existing ffigen llvm-path before applying the CI host override.\n' >&2
+      exit 1
+    fi
+    printf '\nllvm-path:\n  - /usr/lib/llvm-16\n' >> "$config"
+    bash "$repo_dir/mobile/scripts/prepare-pholy.sh"
+  )
+  # Native codegen has its own untracked lock; preserve the actual resolved versions as evidence.
+  cp "$repo_dir/native/native_core/pubspec.lock" "$evidence_dir/native-codegen-pubspec.lock"
+  git -C "$repo_dir" diff --exit-code -- mobile/pubspec.lock native/Cargo.lock
+}
+
+build() {
+  cd "$repo_dir/mobile"
+  flutter build apk --debug --no-pub --target-platform android-x64 \
+    --target=integration_test/pholy_mobile_smoke_test.dart \
+    --dart-define=PHOLY_SERVER_URL=http://127.0.0.1:17415 \
+    --dart-define=PHOLY_ENABLE_PASSKEYS=false
+  [[ -s "$apk" ]]
+  "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk" > "$evidence_dir/debug-apk-metadata.txt"
+  grep -q "^package: name='de[.]pholy[.]app[.]debug' " "$evidence_dir/debug-apk-metadata.txt"
+  sha256sum "$apk" > "$evidence_dir/debug-apk-sha256.txt"
+  (cd android && ./gradlew --stop)
+
+  # This binary starts the in-process fixture test. Keep it separate from the
+  # signed Android test release that connects to the production PHOLY server.
+  local fixture_apk_dir="$RUNNER_TEMP/pholy-native-fixture-apk"
+  mkdir -p "$fixture_apk_dir"
+  cp "$apk" "$fixture_apk_dir/PHOLY-Fixture-Only-Android-x64-debug.apk"
+  cp "$evidence_dir/debug-apk-metadata.txt" "$fixture_apk_dir/"
+  (
+    cd "$fixture_apk_dir"
+    sha256sum PHOLY-Fixture-Only-Android-x64-debug.apk > SHA256SUMS
+  )
+  cat > "$fixture_apk_dir/README.txt" <<'FIXTURE'
+PHOLY: synthetic fixture debug APK for a dedicated Android x86_64 emulator.
+This is not the installable PHOLY Android test release for user accounts.
+Package: de.pholy.app.debug. Fixture endpoint: http://127.0.0.1:17415.
+Entry point: integration_test/pholy_mobile_smoke_test.dart.
+It uses only synthetic accounts/media and executes the integration test.
+Reproduce with the matching source commit and mobile/test_driver/pholy_smoke_driver.dart.
+Use flutter drive --use-application-binary with this APK; do not use a real account.
+FIXTURE
+  printf 'Source commit: %s\nWorkflow run: %s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" >> "$fixture_apk_dir/README.txt"
+
+  # Record actual cache sizes without including SDKs, emulator state or keys.
+  local cache_path
+  {
+    for cache_path in \
+      "$GRADLE_USER_HOME/caches/modules-2" "$GRADLE_USER_HOME/caches/build-cache-1" "$GRADLE_USER_HOME/wrapper/dists" \
+      "$PUB_CACHE/hosted" "$PUB_CACHE/hosted-hashes" "$PUB_CACHE/git" \
+      "$CARGO_HOME/registry/cache" "$CARGO_HOME/registry/index" "$CARGO_HOME/registry/src" \
+      "$repo_dir/native/target" "$repo_dir"/mobile/.dart_tool/hooks_runner/shared/native_core/build/*/target; do
+      if [[ -d "$cache_path" ]]; then du -sh "$cache_path"; fi
+    done
+  } > "$evidence_dir/cache-sizes-after-build.txt"
+}
+
+run() {
+  [[ -s "$apk" && -r /dev/kvm && -w /dev/kvm ]]
+  mark_runtime_state emulator-setup
+  emulator -accel-check > "$evidence_dir/kvm-check-before-run.txt" 2>&1
+  printf 'no\n' | avdmanager create avd --force --name pholy_native_ci --package "$android_image" --device pixel_2
+  python3 - "$ANDROID_AVD_HOME/pholy_native_ci.avd/config.ini" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); settings={}
+for line in p.read_text().splitlines():
+    if '=' in line:
+        key,value=line.split('=',1); settings[key.strip()]=value.strip()
+settings.update({'hw.lcd.width':'720','hw.lcd.height':'1280','hw.lcd.density':'320',
+    'hw.ramSize':'2048','hw.cpu.ncore':'2','hw.keyboard':'yes',
+    'hw.camera.back':'none','hw.camera.front':'none','showDeviceFrame':'no'})
+p.write_text('\n'.join(f'{key}={value}' for key,value in settings.items())+'\n')
+PY
+  timeout --kill-after=2s 10 adb start-server
+  emulator -avd pholy_native_ci -port 5554 -no-window -no-audio -no-boot-anim \
+    -no-snapshot -no-metrics -gpu swiftshader -feature -Vulkan -accel on \
+    -memory 2048 -cores 2 -skin 720x1280 -camera-back none -camera-front none \
+    > "$evidence_dir/emulator.log" 2>&1 &
+  emulator_pid=$!
+  mark_runtime_state boot
+  timeout --kill-after=2s 180 adb -s emulator-5554 wait-for-device
+  timeout --kill-after=2s 2000 adb -s emulator-5554 logcat -b all -v threadtime > "$evidence_dir/logcat-continuous.txt" 2>&1 &
+  logcat_pid=$!
+
+  local deadline=$((SECONDS + 480)) stable=0 previous_pid= current_pid= boot= animation= services= package_path=
+  while (( SECONDS < deadline )); do
+    kill -0 "$emulator_pid" || { printf 'Emulator exited before readiness.\n' >&2; return 1; }
+    boot=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+    animation=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell getprop init.svc.bootanim 2>/dev/null | tr -d '\r' || true)
+    current_pid=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell pidof system_server 2>/dev/null | tr -d '\r' || true)
+    services=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell 'service check package; service check activity' 2>/dev/null | tr -d '\r' || true)
+    package_path=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell cmd package path android 2>/dev/null | tr -d '\r' || true)
+    if [[ "$boot" == 1 && "$animation" == stopped && -n "$current_pid" && "$current_pid" == "$previous_pid" \
+      && "$services" == *'Service package: found'* && "$services" == *'Service activity: found'* && "$package_path" == package:* ]]; then
+      stable=$((stable + 1))
+    else
+      stable=0
+    fi
+    printf 'Android readiness: boot=%s animation=%s stable_samples=%s system_server=%s\n' "$boot" "$animation" "$stable" "$current_pid"
+    (( stable >= 3 )) && break
+    previous_pid=$current_pid
+    sleep 3
+  done
+  (( stable >= 3 )) || { printf 'Android framework did not become stable within the readiness deadline.\n' >&2; return 1; }
+  mark_runtime_state android-ready
+  [[ "$(timeout --kill-after=2s 5 adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" == 35 ]]
+  # Cosmetic wake/unlock failures must not masquerade as application failures.
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell input keyevent 224 || true
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell input keyevent 82 || true
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell settings put global window_animation_scale 0
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell settings put global transition_animation_scale 0
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell settings put global animator_duration_scale 0
+  mark_runtime_state installing-debug-apk
+  timeout --kill-after=2s 120 adb -s emulator-5554 install -r -t "$apk"
+  mark_runtime_state debug-apk-installed
+  timeout --kill-after=2s 10 adb -s emulator-5554 shell pm grant de.pholy.app.debug android.permission.POST_NOTIFICATIONS
+  cd "$repo_dir/mobile"
+  # Device-side captures and partial reports must survive even if the emulator
+  # process dies before the integration driver can retrieve its final response.
+  # Only the synthetic test app's own evidence directory is copied.
+  mkdir -p "$evidence_dir/checkpoints"
+  (
+    trap - EXIT INT TERM
+    while kill -0 "$emulator_pid" 2>/dev/null; do
+      timeout --kill-after=2s 8 adb -s emulator-5554 pull \
+        /sdcard/Android/data/de.pholy.app.debug/files/pholy-smoke-evidence \
+        "$evidence_dir/checkpoints" >> "$evidence_dir/checkpoint-transfer.log" 2>&1 || true
+      sleep 5
+    done
+  ) &
+  evidence_collector_pid=$!
+  (
+    trap - EXIT INT TERM
+    while kill -0 "$emulator_pid" 2>/dev/null; do
+      diagnostic_snapshot >> "$evidence_dir/runtime-host-device-samples.txt" 2>&1
+      sleep 15
+    done
+  ) &
+  diagnostic_pid=$!
+  # The preceding emulator process segfaulted while Flutter used Impeller/GLES.
+  # Restrict this synthetic flow to Flutter's supported Skia CPU test backend;
+  # this runtime choice changes neither the APK nor the product manifest.
+  # Direct VM service transport is proven by the isolated replay. Retain the
+  # same software renderer and preserve the app until evidence is collected.
+  mark_runtime_state awaiting-vm-driver-connection
+  setsid timeout --signal=TERM --kill-after=30s 1200 \
+    flutter --verbose drive --no-pub -d emulator-5554 --debug --no-dds \
+    --no-enable-impeller --enable-software-rendering --keep-app-running \
+    --driver=test_driver/pholy_smoke_driver.dart \
+    --target=integration_test/pholy_mobile_smoke_test.dart \
+    --use-application-binary="$apk" > "$evidence_dir/drive-verbose.log" 2>&1 &
+  drive_pid=$!
+  local connection_deadline=$((SECONDS + 240)) drive_status=0
+  while kill -0 "$drive_pid" 2>/dev/null; do
+    if grep -q 'Connected to Flutter application[.]' "$evidence_dir/drive-verbose.log"; then
+      driver_connected=true
+      mark_runtime_state synthetic-app-flow
+      break
+    fi
+    kill -0 "$emulator_pid" || { mark_runtime_state emulator-exited-during-connection; return 1; }
+    if (( SECONDS >= connection_deadline )); then
+      mark_runtime_state vm-driver-connection-timeout
+      printf 'The Flutter driver did not finish its VM/extension connection within 240 seconds.\n' >&2
+      tail -100 "$evidence_dir/drive-verbose.log"
+      return 1
+    fi
+    sleep 3
+  done
+  wait "$drive_pid" || drive_status=$?
+  drive_pid=
+  # A quick completed run can leave the wait loop before the final log poll.
+  if grep -q 'Connected to Flutter application[.]' "$evidence_dir/drive-verbose.log"; then driver_connected=true; fi
+  printf 'Flutter drive exit code: %s; driver connected: %s\n' "$drive_status" "$driver_connected"
+  tail -100 "$evidence_dir/drive-verbose.log"
+  [[ "$drive_status" == 0 ]] || return "$drive_status"
+  [[ "$driver_connected" == true ]] || { mark_runtime_state vm-driver-connection-unconfirmed; return 1; }
+  python3 - "$PHOLY_SMOKE_OUTPUT_DIR/result.json" "$evidence_dir/drive-verbose.log" <<'PY'
+from pathlib import Path
+import json,re,sys
+# The pinned SDK adapter can exit 0 despite test_api teardown errors. Require
+# the native suite's final summary, which follows all test/teardown callbacks;
+# its exclamation mark differs from integrationDriver's own optimistic line.
+log=Path(sys.argv[2]).read_text(errors='replace')
+assert 'Some tests failed.' not in log, 'The native Flutter suite reported failures despite the driver exit code'
+assert re.search(r'I/flutter\s*\(\s*\d+\):[^\n]*All tests passed!', log), 'Missing successful native Flutter suite summary'
+report=json.load(open(sys.argv[1]))
+smoke=report.get('pholySmoke',{})
+assert smoke.get('passed') is True, 'Driver did not report successful flow and teardown'
+assert smoke.get('flowCompleted') is True
+assert smoke.get('teardownCompleted') is True, 'The synthetic harness teardown did not complete'
+assert smoke.get('teardownFailure') is None
+assert smoke.get('frameworkFailureCount') == 0
+assert smoke.get('fixtureUrl') == 'http://127.0.0.1:17415'
+assert smoke.get('applicationId') == 'de.pholy.app.debug'
+assert isinstance(smoke.get('checks'), list) and len(smoke['checks']) > 0
+assert isinstance(report.get('screenshots'), list) and len(report['screenshots']) > 0
+print('Native synthetic flow completed using Flutter software rendering; production renderer and physical-device behavior remain outside this test.')
+PY
+  mark_runtime_state synthetic-flow-completed
+}
+
+"$phase"

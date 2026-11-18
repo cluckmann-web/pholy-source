@@ -1,7 +1,7 @@
 # PHOLY Mobile: Entwicklung, Build und Testinstallation
 
-Diese Anleitung gehört zur Flutter-App **3.4.1-pholy-mobile.2**, Basisbuildnummer
-**3040202**. Sie beschreibt den Quellstand und seine Buildwege. Ausgeführte
+Diese Anleitung gehört zur Flutter-App **3.4.1-pholy-mobile.3**, Basisbuildnummer
+**3040203**. Sie beschreibt den Quellstand und seine Buildwege. Ausgeführte
 Prüfungen, APK-Prüfsummen, Downloadadressen und verbleibende Laufzeitbefunde
 gehören in den jeweiligen separaten Prüf- und Auslieferungsbericht; diese
 Anleitung bestätigt keine bestandenen Geräteprüfungen.
@@ -23,7 +23,7 @@ zu den Kennungen und zum entsprechenden Quellstand stehen in
 [PHOLY-MOBILE-RELEASE.json](PHOLY-MOBILE-RELEASE.json). Das öffentliche
 Quellrepository ist [cluckmann-web/pholy-source](https://github.com/cluckmann-web/pholy-source).
 Der im Manifest eingetragene mobile Quellverweis lautet
-`releases/pholy-mobile-3.4.1-test.2`; bei der Auslieferung muss dieser Verweis
+`releases/pholy-mobile-3.4.1-test.3`; bei der Auslieferung muss dieser Verweis
 zum tatsächlich veröffentlichten Quellstand der APK passen.
 
 Die normale Anmeldung ist fest auf **https://pholy.de** ausgerichtet. Es gibt
@@ -198,22 +198,22 @@ auf und baut signierte Release-APKs für **arm64** und **x86_64**. Es erzwingt:
 ```text
 PHOLY_SERVER_URL=https://pholy.de
 PHOLY_ENABLE_PASSKEYS=false
-build-name=3.4.1-pholy-mobile.2
-build-number=3040202
+build-name=3.4.1-pholy-mobile.3
+build-number=3040203
 ```
 
-`3040202` ist die an Flutter übergebene **Basisbuildnummer**. Beim bestehenden
+`3040203` ist die an Flutter übergebene **Basisbuildnummer**. Beim bestehenden
 `--split-per-abi`-Build erhöht Flutter den Android-`versionCode` standardmäßig
 um den jeweiligen ABI-Zuschlag. Die fertigen APKs werden deshalb auf diese
 abgeleiteten Werte geprüft:
 
 | APK-Architektur | Basisbuildnummer | ABI-Zuschlag | Android-`versionCode` |
 | --- | ---: | ---: | ---: |
-| arm64-v8a | 3040202 | 2000 | **3042202** |
-| x86_64 | 3040202 | 4000 | **3044202** |
+| arm64-v8a | 3040203 | 2000 | **3042203** |
+| x86_64 | 3040203 | 4000 | **3044203** |
 
 Die sichtbare Versionsbezeichnung bleibt bei beiden APKs
-`3.4.1-pholy-mobile.2`. Es wird keine Option zum Unterdrücken dieser
+`3.4.1-pholy-mobile.3`. Es wird keine Option zum Unterdrücken dieser
 Flutter-Standardberechnung gesetzt.
 
 Nur bei `PHOLY_ANDROID_TEST_BUILD=true` deaktiviert die Android-Konfiguration
@@ -526,7 +526,7 @@ cd ..
 flutter build ios --release --no-codesign \
   --dart-define=PHOLY_SERVER_URL=https://pholy.de \
   --dart-define=PHOLY_ENABLE_PASSKEYS=false \
-  --build-name=3.4.1 --build-number=3040202
+  --build-name=3.4.1 --build-number=3040203
 ```
 
 Dies beschreibt eine **unsignierte Kompilierungsprüfung**, keine auf einem
@@ -538,11 +538,11 @@ Eine automatisierte signierte IPA kann nach Einrichtung des Signings mit
 Verteilungsart passenden `--export-options-plist` erzeugt werden; dieselben
 Server-/Passkey-Defines und Versionsargumente sind dabei zu übergeben.
 
-**iOS benötigt `--build-name=3.4.1 --build-number=3040202`.** Der Android-
-Versionsname `3.4.1-pholy-mobile.2` darf nicht unverändert als
+**iOS benötigt `--build-name=3.4.1 --build-number=3040203`.** Der Android-
+Versionsname `3.4.1-pholy-mobile.3` darf nicht unverändert als
 `CFBundleShortVersionString` übernommen werden. Widget und Share Extension
 verwenden eigene Xcode-Versionswerte: `MARKETING_VERSION=3.4.1` und
-`CURRENT_PROJECT_VERSION=3040202` sind für Debug, Release und Profile
+`CURRENT_PROJECT_VERSION=3040203` sind für Debug, Release und Profile
 gesetzt. Bei Versionswechseln die numerischen Flutter-Argumente der Hauptapp
 und diese Werte beider Erweiterungen gemeinsam aktualisieren und vor dem
 Archivieren abgleichen. Gemeinsamer Dart-Code,
