@@ -6,6 +6,9 @@ Prüfungen, APK-Prüfsummen, Downloadadressen und verbleibende Laufzeitbefunde
 gehören in den jeweiligen separaten Prüf- und Auslieferungsbericht; diese
 Anleitung bestätigt keine bestandenen Geräteprüfungen.
 
+Die Ergebnisse der aktuellen Android-Auslieferung stehen im
+[Test-2-Prüf- und Auslieferungsbericht](PHOLY-MOBILE-TEST2-REPORT.md).
+
 ## 1. Grundlage und Umfang
 
 PHOLY entwickelt die vorhandene Immich-App in `mobile/` weiter. Anmeldung,
