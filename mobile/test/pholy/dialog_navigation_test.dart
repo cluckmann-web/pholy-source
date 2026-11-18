@@ -3,32 +3,38 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/utils/dialog_navigation.dart';
 
 void main() {
-  testWidgets('navigation from a profile dialog dismisses its modal barrier', (tester) async {
+  testWidgets('settings opens after closing a nested profile dialog', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Builder(
-          builder: (homeContext) => Scaffold(
-            body: TextButton(
-              onPressed: () => showDialog<void>(
-                context: homeContext,
-                builder: (dialogContext) => AlertDialog(
-                  title: const Text('Profile menu'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => dismissDialogAndNavigate(
-                        dialogContext,
-                        () => Navigator.of(homeContext).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const Scaffold(body: Text('Settings loaded')),
-                          ),
-                        ),
+        home: Navigator(
+          onGenerateRoute: (_) => MaterialPageRoute<void>(
+            builder: (pageContext) => Scaffold(
+              body: TextButton(
+                onPressed: () => showDialog<void>(
+                  context: pageContext,
+                  useRootNavigator: false,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('Profile menu'),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          final navigator = Navigator.of(pageContext);
+                          dismissDialogAndNavigate(
+                            dialogContext,
+                            () => navigator.push<void>(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const Scaffold(body: Text('Settings loaded')),
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Settings'),
                       ),
-                      child: const Text('Settings'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                child: const Text('Open profile menu'),
               ),
-              child: const Text('Open profile menu'),
             ),
           ),
         ),
