@@ -30,14 +30,20 @@ Future<void> main() async {
     },
     responseDataCallback: (Map<String, dynamic>? data) async {
       final smoke = data?['pholySmoke'];
-      final flowCompleted = smoke is Map<String, dynamic> && smoke['passed'] == true;
+      final harnessPassed =
+          smoke is Map<String, dynamic> &&
+          smoke['passed'] == true &&
+          smoke['flowCompleted'] == true &&
+          smoke['teardownCompleted'] == true &&
+          smoke['teardownFailure'] == null &&
+          smoke['frameworkFailureCount'] == 0;
       final report = <String, dynamic>{
         ...?data,
         // Do not duplicate binary screenshot arrays in the readable report.
         'screenshots': screenshots,
-        'suiteStatus': flowCompleted
-            ? 'PHOLY smoke flow completed; the Flutter suite must also succeed.'
-            : 'PHOLY smoke flow incomplete or missing; the driver fails.',
+        'suiteStatus': harnessPassed
+            ? 'PHOLY flow and teardown completed; the runner also verifies the native Flutter suite summary.'
+            : 'PHOLY flow or teardown failed, incomplete or missing; the driver fails.',
       };
       final file = File('${directory.path}/result.json');
       await file.writeAsString(const JsonEncoder.withIndent('  ').convert(report), flush: true);
@@ -45,13 +51,16 @@ Future<void> main() async {
       if (smoke is Map<String, dynamic>) {
         final checks = smoke['checks'];
         stdout.writeln('PHOLY_SMOKE_CHECKS=${checks is List ? checks.length : 0}');
-        stdout.writeln('PHOLY_SMOKE_FLOW_COMPLETED=${smoke['passed'] == true}');
+        stdout.writeln('PHOLY_SMOKE_FLOW_COMPLETED=${smoke['flowCompleted'] == true}');
+        stdout.writeln('PHOLY_SMOKE_TEARDOWN_COMPLETED=${smoke['teardownCompleted'] == true}');
       }
       // integrationDriver calls exit(0) immediately after this callback when
       // its SDK result says success. Require the app's own terminal check here
-      // as well, so an incomplete/timed-out flow cannot produce a green driver.
-      if (!flowCompleted) {
-        throw StateError('PHOLY smoke flow did not complete successfully; inspect ${file.absolute.path}');
+      // and teardown, so a timeout or cleanup error cannot produce a green
+      // driver. The CI runner separately checks the native suite's summary to
+      // catch later binding.postTest/tearDownAll failures omitted by this SDK.
+      if (!harnessPassed) {
+        throw StateError('PHOLY smoke flow or teardown did not complete successfully; inspect ${file.absolute.path}');
       }
     },
   );

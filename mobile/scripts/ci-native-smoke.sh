@@ -63,6 +63,7 @@ temporary.write_text(json.dumps({
     'recorded_at_utc': datetime.now(timezone.utc).isoformat(),
     'cleanup_completed': cleanup == 'true',
     'source_commit': os.environ.get('GITHUB_SHA'),
+    'run_id': os.environ.get('GITHUB_RUN_ID'),
     'driver_connection_confirmed': connected == 'true',
     'scope': 'Synthetic debug APK; loopback fixture; no production account or real media',
 }, indent=2) + '\n')
@@ -401,11 +402,22 @@ PY
   tail -100 "$evidence_dir/drive-verbose.log"
   [[ "$drive_status" == 0 ]] || return "$drive_status"
   [[ "$driver_connected" == true ]] || { mark_runtime_state vm-driver-connection-unconfirmed; return 1; }
-  python3 - "$PHOLY_SMOKE_OUTPUT_DIR/result.json" <<'PY'
-import json,sys
+  python3 - "$PHOLY_SMOKE_OUTPUT_DIR/result.json" "$evidence_dir/drive-verbose.log" <<'PY'
+from pathlib import Path
+import json,re,sys
+# The pinned SDK adapter can exit 0 despite test_api teardown errors. Require
+# the native suite's final summary, which follows all test/teardown callbacks;
+# its exclamation mark differs from integrationDriver's own optimistic line.
+log=Path(sys.argv[2]).read_text(errors='replace')
+assert 'Some tests failed.' not in log, 'The native Flutter suite reported failures despite the driver exit code'
+assert re.search(r'I/flutter\s*\(\s*\d+\):[^\n]*All tests passed!', log), 'Missing successful native Flutter suite summary'
 report=json.load(open(sys.argv[1]))
 smoke=report.get('pholySmoke',{})
-assert smoke.get('passed') is True, 'Driver did not report completion of the synthetic flow'
+assert smoke.get('passed') is True, 'Driver did not report successful flow and teardown'
+assert smoke.get('flowCompleted') is True
+assert smoke.get('teardownCompleted') is True, 'The synthetic harness teardown did not complete'
+assert smoke.get('teardownFailure') is None
+assert smoke.get('frameworkFailureCount') == 0
 assert smoke.get('fixtureUrl') == 'http://127.0.0.1:17415'
 assert smoke.get('applicationId') == 'de.pholy.app.debug'
 assert isinstance(smoke.get('checks'), list) and len(smoke['checks']) > 0

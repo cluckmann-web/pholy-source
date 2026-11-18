@@ -29,7 +29,6 @@ import 'package:immich_mobile/providers/auth.provider.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
-import 'package:immich_mobile/providers/websocket.provider.dart';
 import 'package:immich_mobile/services/foreground_upload.service.dart';
 import 'package:immich_mobile/utils/bootstrap.dart';
 import 'package:immich_mobile/widgets/forms/login/login_form.dart';
@@ -82,11 +81,17 @@ void main() {
     ProviderContainer? container;
     bool surfaceConverted = false;
     bool completed = false;
+    bool teardownCompleted = false;
+    String? teardownFailure;
     Size? logicalSurfaceSize;
 
     Future<void> saveEvidence() async {
       final report = <String, dynamic>{
-        'passed': completed,
+        'passed': completed && teardownCompleted && teardownFailure == null && binding.failureMethodsDetails.isEmpty,
+        'flowCompleted': completed,
+        'teardownCompleted': teardownCompleted,
+        'teardownFailure': teardownFailure,
+        'frameworkFailureCount': binding.failureMethodsDetails.length,
         'applicationId': package.packageName,
         'appVersion': '${package.version}+${package.buildNumber}',
         'fixtureUrl': PholySmokeFixture.baseUrl,
@@ -158,27 +163,37 @@ void main() {
 
     addTearDown(() async {
       // Failed widget tests retain their tree until binding.postTest. Capture
-      // it before closing the fixture/providers and before flutter drive exits
+      // it before closing the fixture and before flutter drive exits
       // the app; the host's later screenshot would only show the launcher.
       try {
-        if (!completed && container != null) {
-          try {
-            await capture('99-failure', timeout: const Duration(seconds: 5)).timeout(const Duration(seconds: 10));
-          } catch (_) {
-            debugPrint('PHOLY_SMOKE_FAILURE_SCREENSHOT_UNAVAILABLE');
+        try {
+          if (!completed && container != null) {
+            try {
+              await capture('99-failure', timeout: const Duration(seconds: 5)).timeout(const Duration(seconds: 10));
+            } catch (_) {
+              debugPrint('PHOLY_SMOKE_FAILURE_SCREENSHOT_UNAVAILABLE');
+            }
           }
+          // On success Flutter has already unmounted ProviderScope before
+          // addTearDown. Its providers own their socket/sync disposal; reading
+          // that disposed container here is invalid and duplicates cleanup.
+          await BackgroundWorkerFgService(BackgroundWorkerFgHostApi()).disable();
+          await fixture.close();
+          await workerManagerPatch.dispose();
+        } finally {
+          await binding.setSurfaceSize(null);
+          logicalSurfaceSize = null;
         }
+        teardownCompleted = true;
         await saveEvidence();
-        if (container case final current?) {
-          current.read(websocketProvider.notifier).disconnect();
-          await current.read(backgroundSyncProvider).cancel();
-        }
-        await BackgroundWorkerFgService(BackgroundWorkerFgHostApi()).disable();
-        await fixture.close();
-        await workerManagerPatch.dispose();
-      } finally {
-        await binding.setSurfaceSize(null);
-        logicalSurfaceSize = null;
+      } catch (error) {
+        teardownCompleted = false;
+        teardownFailure = error.toString();
+        // Update reportData before its disk write. Even a failed evidence write
+        // must not leave a true result for integrationDriver, whose SDK result
+        // does not include errors thrown by test_api's addTearDown callbacks.
+        await saveEvidence();
+        rethrow;
       }
     });
 
