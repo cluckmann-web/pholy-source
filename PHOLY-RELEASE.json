@@ -1,8 +1,8 @@
 {
   "application": "PHOLY",
   "deployment": "native-systemd",
-  "public_source": "https://github.com/cluckmann-web/pholy-source/tree/releases/3.4.1-pholy.15",
-  "release": "3.4.1-pholy.15",
+  "public_source": "https://github.com/cluckmann-web/pholy-source/tree/releases/3.4.1-pholy.16",
+  "release": "3.4.1-pholy.16",
   "upstream_commit": "22b95194c80a2f2e6201093916b6c8c3d6d271dd",
   "upstream_repository": "https://github.com/immich-app/immich",
   "upstream_version": "v3.4.1"

@@ -39,8 +39,9 @@
     type PersonResponseDto,
     type StackResponseDto,
   } from '@immich/sdk';
-  import { CommandPaletteDefaultProvider } from '@immich/ui';
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { CommandPaletteDefaultProvider, Icon } from '@immich/ui';
+  import { mdiCommentOutline } from '@mdi/js';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import type { SwipeCustomEvent } from 'svelte-gestures';
   import { t } from 'svelte-i18n';
   import { fly } from 'svelte/transition';
@@ -107,6 +108,15 @@
 
   let previewStackedAsset: AssetResponseDto | undefined = $state();
   let hasPhotoCommentDraft = $state(false);
+  let commentsCollapsed = $state(false);
+  let showCommentsButton = $state<HTMLButtonElement>();
+  let hideCommentsButton = $state<HTMLButtonElement>();
+  const commentsPanelId = $props.id();
+  const setCommentsCollapsed = async (collapsed: boolean) => {
+    commentsCollapsed = collapsed;
+    await tick();
+    (collapsed ? showCommentsButton : hideCommentsButton)?.focus();
+  };
   let stack: StackResponseDto | undefined = $state();
 
   const asset = $derived(previewStackedAsset ?? cursor.current);
@@ -502,7 +512,7 @@
       assetViewerManager.closeActivityPanel();
     }
   });
-  const showPhotoComments = $derived(
+  const renderPhotoComments = $derived(
     canUsePhotoComments &&
       $slideshowState === SlideshowState.None &&
       !assetViewerManager.isShowEditor &&
@@ -510,6 +520,7 @@
       !showDetailPanel &&
       !(isShared && album && assetViewerManager.isShowActivityPanel),
   );
+  const showPhotoComments = $derived(renderPhotoComments && !commentsCollapsed);
   const photoCommentContext = $derived<PhotoCommentContext>(
     album ? { kind: 'album', albumId: album.id } : { kind: 'private' },
   );
@@ -642,6 +653,19 @@
       />
     {/if}
 
+    {#if renderPhotoComments && commentsCollapsed}
+      <button
+        bind:this={showCommentsButton}
+        class="show-photo-comments"
+        class:above-stack={stack && withStacked}
+        type="button"
+        aria-expanded="false"
+        aria-controls={commentsPanelId}
+        onclick={() => setCommentsCollapsed(false)}
+        ><Icon icon={mdiCommentOutline} size="18" />{$t('pholy_comments.show')}</button
+      >
+    {/if}
+
     {#if showActivityStatus}
       <div class="absolute inset-e-0 bottom-0 me-8 mb-20">
         <ActivityStatus
@@ -671,10 +695,13 @@
     </div>
   {/if}
 
-  {#if showPhotoComments}
+  {#if renderPhotoComments}
     <aside
+      id={commentsPanelId}
       class="photo-comments-panel"
       data-testid="photo-comments-panel"
+      hidden={commentsCollapsed}
+      inert={commentsCollapsed}
       aria-label={$t('pholy_comments.title')}
       translate="yes"
     >
@@ -683,6 +710,10 @@
           assetId={asset.id}
           context={photoCommentContext}
           panel
+          active={!commentsCollapsed}
+          controlsId={commentsPanelId}
+          bind:hideButton={hideCommentsButton}
+          onHide={() => setCommentsCollapsed(true)}
           onDraftChange={(hasDraft) => (hasPhotoCommentDraft = hasDraft)}
         />
       {/key}
@@ -760,6 +791,31 @@
 </section>
 
 <style>
+  .photo-comments-panel[hidden] {
+    display: none;
+  }
+  .show-photo-comments {
+    position: absolute;
+    bottom: 24px;
+    inset-inline-start: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid #dce2ea;
+    background: #fff;
+    color: #172033;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .show-photo-comments.above-stack {
+    bottom: 104px;
+  }
+  .show-photo-comments:focus-visible {
+    outline: 3px solid #5c8cff;
+    outline-offset: 3px;
+  }
   #immich-asset-viewer.with-photo-comments {
     grid-template-columns: repeat(4, minmax(0, 1fr)) clamp(320px, 29vw, 410px);
     grid-template-rows: 64px minmax(0, 1fr);

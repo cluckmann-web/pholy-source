@@ -112,6 +112,6 @@ starts its own SMTP sink on 127.0.0.1:25261; no messages leave that sink. It cre
 and removes only guarded synthetic fixtures. The operator must stop staging and
 remove its isolated database, Redis state and media folder after checking.
 
-The public release branch is `releases/3.4.1-pholy.15`. Publish complete matching
+The public release branch is `releases/3.4.1-pholy.16`. Publish complete matching
 source and build instructions before activating the release; keep the private
 repository private. No backup is created by this update.

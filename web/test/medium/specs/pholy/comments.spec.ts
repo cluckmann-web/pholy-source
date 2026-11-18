@@ -127,7 +127,18 @@ test('members comment, reply, like, edit and delete with a preserved reply threa
   });
   await open(page);
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('textbox', { name: 'Schreibe einen Kommentar …' }).fill('Danke fürs Teilen!');
+  const communityInput = dialog.getByRole('textbox', { name: 'Schreibe einen Kommentar …' });
+  const communityPhoto = dialog.locator('.photo-stage');
+  const communityPhotoBox = (await communityPhoto.boundingBox())!;
+  await communityInput.fill('Danke fürs Teilen!');
+  await dialog.getByRole('button', { name: 'Kommentare ausblenden', exact: true }).click();
+  const showCommunityComments = dialog.getByRole('button', { name: 'Kommentare anzeigen', exact: true });
+  await expect(showCommunityComments).toBeFocused();
+  await expect(communityInput).toBeHidden();
+  expect((await communityPhoto.boundingBox())!.width).toBeGreaterThan(communityPhotoBox.width + 200);
+  await showCommunityComments.click();
+  await expect(dialog.getByRole('button', { name: 'Kommentare ausblenden', exact: true })).toBeFocused();
+  await expect(communityInput).toHaveValue('Danke fürs Teilen!');
   await dialog.getByRole('button', { name: 'Kommentar senden', exact: true }).click();
   await expect(dialog.getByText('Danke fürs Teilen!', { exact: true })).toBeVisible();
   const original = dialog.getByRole('article', { name: 'Kommentar von Lena Berg' });
@@ -290,6 +301,15 @@ test('private photo opens with comments beside it and accepts a comment without 
   await input.press('ArrowRight');
   await expect(input).toHaveValue('Direkt am Foto kommentiert');
   await expect(page).toHaveURL(Route.viewAsset({ id: assetId }));
+  await panel.getByRole('button', { name: 'Kommentare ausblenden', exact: true }).click();
+  const showComments = page.getByRole('button', { name: 'Kommentare anzeigen', exact: true });
+  await expect(panel).toBeHidden();
+  await expect(showComments).toBeFocused();
+  expect((await app.viewer.content.boundingBox())!.width).toBeGreaterThan(photoBox.width + 200);
+  await page.screenshot({ path: 'test-results/pholy-comments-hidden-desktop.png' });
+  await showComments.click();
+  await expect(panel.getByRole('button', { name: 'Kommentare ausblenden', exact: true })).toBeFocused();
+  await expect(input).toHaveValue('Direkt am Foto kommentiert');
   await input.press('Enter');
   await expect(panel.getByText('Direkt am Foto kommentiert', { exact: true })).toBeVisible();
   await expect(input).toHaveValue('');
@@ -324,9 +344,14 @@ test('moving to the next photo changes the inline thread and clears the previous
   await input.fill('Nur für das erste Foto');
   await input.press('ArrowRight');
   await expect(page).toHaveURL(Route.viewAsset({ id: assetId }));
+  await page.getByRole('button', { name: 'Kommentare ausblenden', exact: true }).click();
   await page.getByLabel('Nächste Datei anzeigen', { exact: true }).click();
   await app.viewer.waitForAsset(second);
   await expect(page).toHaveURL(Route.viewAsset({ id: secondAssetId }));
+  await expect(page.getByTestId('photo-comments-panel')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Kommentare anzeigen', exact: true })).toBeVisible();
+  expect(ids).not.toContain(secondAssetId);
+  await page.getByRole('button', { name: 'Kommentare anzeigen', exact: true }).click();
   await expect(input).toHaveValue('');
   await expect(page.getByText('Das Licht zwischen den Bergen ist wunderschön.')).toHaveCount(0);
   expect(ids).toContain(secondAssetId);
@@ -396,6 +421,17 @@ test('mobile photo shows the inline composer below the image even with a long di
   await input.press('End');
   await input.press('x');
   await expect(input).toHaveValue('Ohne weiteren Klick\nx');
+  await panel.getByRole('button', { name: 'Kommentare ausblenden', exact: true }).click();
+  const showComments = page.getByRole('button', { name: 'Kommentare anzeigen', exact: true });
+  await expect(panel).toBeHidden();
+  await expect(showComments).toBeFocused();
+  await expect(showComments).toBeInViewport({ ratio: 1 });
+  expect((await app.viewer.content.boundingBox())!.height).toBeGreaterThan(photoBox.height + 200);
+  await page.screenshot({ path: 'test-results/pholy-comments-hidden-mobile.png' });
+  await showComments.click();
+  await expect(panel.getByRole('button', { name: 'Kommentare ausblenden', exact: true })).toBeFocused();
+  await expect(input).toHaveValue('Ohne weiteren Klick\nx');
+  await expect(input).toBeInViewport({ ratio: 1 });
   await expect(page).toHaveURL(Route.viewAsset({ id: assetId }));
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth))

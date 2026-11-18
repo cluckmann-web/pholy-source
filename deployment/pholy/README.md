@@ -382,7 +382,7 @@ Verification:
 
 ## External source link (PHOLY .10)
 
-The source page links to GitHub release branch `releases/3.4.1-pholy.15`.
+The source page links to GitHub release branch `releases/3.4.1-pholy.16`.
 It has no direct archive download button. Before activating this release,
 verify that the GitHub repository and branch are readable without an account,
 and that the branch tree equals the source tree used by the native builder.
@@ -392,7 +392,7 @@ existing release branch to a different source tree.
 To build from the public repository, install the prerequisites above, then:
 
 ```sh
-git clone --branch releases/3.4.1-pholy.15 https://github.com/cluckmann-web/pholy-source.git
+git clone --branch releases/3.4.1-pholy.16 https://github.com/cluckmann-web/pholy-source.git
 cd pholy-source
 PHOLY_BUILD_USER="$(id -un)" \
 PHOLY_DOMAIN_ROOT=/absolute/path/to/pholy-rebuild \
@@ -432,3 +432,10 @@ Opening a photo now shows its comments directly, beside the image on desktop and
 below it on mobile. The separate comments button is no longer necessary.
 Permissions, discussion contexts and existing comment storage are unchanged.
 No database migration is required for the .14 to .15 update.
+
+## Hide and show comments (.16)
+
+Photo discussion headers include a hide control. A show-comments action remains
+on the enlarged image. Hiding retains the current draft and pauses background
+comment fetching. This works in both the personal viewer and community details.
+No database migration is required for the .15 to .16 update.

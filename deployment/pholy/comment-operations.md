@@ -1,4 +1,4 @@
-# PHOLY .15: inline photo comments
+# PHOLY .16: collapsible photo comments
 
 PHOLY photo comments are an additive feature in the existing native application.
 The photo viewer and community photo detail provide names, safe avatars, timestamps,
@@ -10,6 +10,12 @@ desktop and underneath on mobile. No separate comments action is required.
 Switching photos changes the discussion context and clears the previous draft.
 The metadata, editing and slideshow views retain their dedicated controls.
 Community photo details also show the image and discussion together.
+
+The discussion header offers a hide action in both photo viewers. Hiding gives
+the image the available space and leaves a show-comments control on the image.
+The current draft survives hiding and showing; selecting another photo clears
+it. Hidden discussions pause automatic fetching. The hidden state lasts while
+browsing the current viewer; opening a new viewer shows comments by default.
 
 ## Visibility
 
@@ -44,11 +50,11 @@ rate limits and database constraints protect concurrent writes.
 
 ## Deployment and verification
 
-Release .15 changes only presentation and requires no new database migration.
+Releases .15 and .16 change only presentation and require no new database migration.
 Migration `1794950000006-PholyComments` from .14 adds the comment storage; existing media
 and native activity rows are retained. Build with the existing pinned native
 toolchain and global Sharp support. Publish the complete corresponding source at
-`releases/3.4.1-pholy.15` before activating the release; restart only `pholy-server`.
+`releases/3.4.1-pholy.16` before activating the release; restart only `pholy-server`.
 
 Verify permissions, context separation, reply ownership, edit/delete authorization,
 duplicate likes, revoked access, export and keyboard/mobile interaction. The

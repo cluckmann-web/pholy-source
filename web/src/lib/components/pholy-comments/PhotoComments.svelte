@@ -22,18 +22,26 @@
     assetId,
     context,
     panel = false,
+    active = true,
+    onHide,
+    controlsId,
+    hideButton = $bindable(),
     onDraftChange,
   }: {
     assetId: string;
     context: PhotoCommentContext;
     panel?: boolean;
+    active?: boolean;
+    onHide?: () => void;
+    controlsId?: string;
+    hideButton?: HTMLButtonElement;
     onDraftChange?: (hasDraft: boolean) => void;
   } = $props();
   const authenticated = $derived(authManager.authenticated && !authManager.isSharedLink);
   const thread = createInfiniteQuery(
     () => ({
       ...getPhotoCommentsQuery(assetId, context, authenticated ? authManager.user.id : ''),
-      enabled: authenticated,
+      enabled: authenticated && active,
     }),
     () => queryClient,
   );
@@ -265,7 +273,20 @@
 <section class="photo-comments" class:panel aria-label={$t('pholy_comments.title')}>
   <header>
     <h2>{$t('pholy_comments.title')}</h2>
-    {#if authenticated && thread.data}<span>{$t('pholy_comments.total', { values: { count: total } })}</span>{/if}
+    <div class="header-actions">
+      {#if authenticated && thread.data}<span>{$t('pholy_comments.total', { values: { count: total } })}</span>{/if}
+      {#if onHide}
+        <button
+          bind:this={hideButton}
+          class="hide-comments"
+          type="button"
+          aria-label={$t('pholy_comments.hide')}
+          aria-expanded="true"
+          aria-controls={controlsId}
+          onclick={onHide}>{$t('pholy_comments.hide_short')}</button
+        >
+      {/if}
+    </div>
   </header>
   {#if !authenticated}
     <p class="notice">{$t('pholy_comments.login')}</p>
@@ -417,7 +438,20 @@
     font-size: 18px;
     font-weight: 700;
   }
-  header > span,
+  .header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px 12px;
+  }
+  .hide-comments {
+    min-height: 36px;
+    padding: 6px 8px;
+    color: #3359a8;
+    font-weight: 600;
+  }
+  .header-actions > span,
   .scope,
   .notice {
     color: #64748b;
@@ -656,7 +690,8 @@
   :global(.dark) .comment-actions button {
     color: #a3b0c3;
   }
-  :global(.dark) .comment-actions button.liked {
+  :global(.dark) .comment-actions button.liked,
+  :global(.dark) .hide-comments {
     color: #9db9ff;
   }
   :global(.dark) .confirmation {
