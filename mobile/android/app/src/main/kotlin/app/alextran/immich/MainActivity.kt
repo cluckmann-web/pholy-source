@@ -25,6 +25,7 @@ import app.alextran.immich.sync.NativeSyncApi
 import app.alextran.immich.sync.NativeSyncApiImpl26
 import app.alextran.immich.sync.NativeSyncApiImpl30
 import app.alextran.immich.viewintent.ViewIntentPlugin
+import app.alextran.immich.updates.PholyUpdatesPlugin
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 
@@ -33,6 +34,8 @@ class MainActivity : FlutterFragmentActivity() {
     super.configureFlutterEngine(flutterEngine)
     registerPlugins(this, flutterEngine)
     flutterEngine.plugins.add(PasskeyPlugin())
+    // The updater belongs to the foreground engine, never a backup worker.
+    flutterEngine.plugins.add(PholyUpdatesPlugin())
   }
 
   override fun onNewIntent(intent: Intent) {

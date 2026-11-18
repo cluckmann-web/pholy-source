@@ -2,9 +2,12 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart' hide Store;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/constants/pholy_brand.dart';
 import 'package:immich_mobile/data/store.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
+import 'package:immich_mobile/pages/common/pholy_imprint.page.dart';
+import 'package:immich_mobile/pages/common/pholy_updates.page.dart';
 import 'package:immich_mobile/providers/auth.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/widgets/settings/advanced_settings.dart';
@@ -132,6 +135,34 @@ class _MobileLayout extends ConsumerWidget {
         onTap: () => context.pushRoute(const WhatsNewRoute()),
       ),
     );
+    settings.addAll([
+      SettingsCard(
+        icon: Icons.system_update_outlined,
+        title: pholyText(context, 'App-Updates', 'App updates'),
+        subtitle: pholyText(context, 'Version prüfen und PHOLY aktualisieren', 'Check the version and update PHOLY'),
+        onTap: () => Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            settings: const RouteSettings(name: 'PholyUpdatesPage'),
+            builder: (_) => const PholyUpdatesPage(),
+          ),
+        ),
+      ),
+      SettingsCard(
+        icon: Icons.info_outline,
+        title: pholyText(context, 'Impressum', 'Legal notice'),
+        subtitle: pholyText(
+          context,
+          'Anbieter, Kontakt und rechtliche Hinweise',
+          'Provider, contact and legal information',
+        ),
+        onTap: () => Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            settings: const RouteSettings(name: 'PholyImprintPage'),
+            builder: (_) => const PholyImprintPage(),
+          ),
+        ),
+      ),
+    ]);
     return ListView(padding: const EdgeInsets.only(top: 10.0, bottom: 60), children: [...settings]);
   }
 }
@@ -166,6 +197,30 @@ class _TabletLayout extends HookConsumerWidget {
                   title: Text(context.t.whats_new),
                   leading: const Icon(Icons.auto_awesome_outlined),
                   onTap: () => context.pushRoute(const WhatsNewRoute()),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: ListTile(
+                  title: Text(pholyText(context, 'App-Updates', 'App updates')),
+                  leading: const Icon(Icons.system_update_outlined),
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      settings: const RouteSettings(name: 'PholyUpdatesPage'),
+                      builder: (_) => const PholyUpdatesPage(),
+                    ),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: ListTile(
+                  title: Text(pholyText(context, 'Impressum', 'Legal notice')),
+                  leading: const Icon(Icons.info_outline),
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      settings: const RouteSettings(name: 'PholyImprintPage'),
+                      builder: (_) => const PholyImprintPage(),
+                    ),
+                  ),
                 ),
               ),
             ],

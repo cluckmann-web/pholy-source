@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- PHOLY's explicitly selected sideload test distribution only. -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+  <application>
+    <provider
+      android:name="app.alextran.immich.updates.PholyUpdateFileProvider"
+      android:authorities="${applicationId}.pholy-updates"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/pholy_update_paths" />
+    </provider>
+  </application>
+</manifest>

@@ -1,5 +1,5 @@
 PHOLY Android / iOS client
-Test release 3.4.1-pholy-mobile.1 (3040201)
+Test release 3.4.1-pholy-mobile.2 (3040202)
 
 Based on Immich v3.4.1, upstream commit
 22b95194c80a2f2e6201093916b6c8c3d6d271dd.
@@ -7,7 +7,7 @@ PHOLY platform base 3.4.1-pholy.16, source commit
 3902eeb36c0a61ff0cccc307091b07d776b0193a.
 
 Complete corresponding source, modifications, dependency lockfiles and build instructions:
-https://github.com/cluckmann-web/pholy-source/tree/releases/pholy-mobile-3.4.1-test.1
+https://github.com/cluckmann-web/pholy-source/tree/releases/pholy-mobile-3.4.1-test.2
 
 PHOLY additions are licensed under GNU AGPL version 3.
 The upstream copyright, license and dependency notices remain in the source.

@@ -29,6 +29,11 @@ android {
 
   sourceSets {
     main.java.srcDirs += 'src/main/kotlin'
+    // Only explicitly selected, signed sideload releases may request an APK install.
+    // Store and ordinary debug builds never merge this permission/provider overlay.
+    if (System.getenv("PHOLY_ANDROID_TEST_BUILD") == "true") {
+      release.manifest.srcFile 'src/pholyTest/AndroidManifest.xml'
+    }
   }
 
   buildFeatures {
@@ -45,6 +50,7 @@ android {
     resValue "string", "app_name", "PHOLY"
     // Enable only after the PHOLY signing certificate/domain association is installed.
     buildConfigField "boolean", "PASSKEYS", "false"
+    buildConfigField "boolean", "PHOLY_SIDELOAD_UPDATES", "false"
   }
 
   signingConfigs {
@@ -82,6 +88,7 @@ android {
       if (System.getenv("PHOLY_ANDROID_TEST_BUILD") == "true") {
         applicationIdSuffix ".test"
         resValue "string", "app_name", "PHOLY Test"
+        buildConfigField "boolean", "PHOLY_SIDELOAD_UPDATES", "true"
         // Keep Java/Kotlin symbols in test APKs; Flutter still uses release/AOT mode.
         minifyEnabled false
         shrinkResources false
@@ -96,6 +103,7 @@ flutter {
 }
 
 dependencies {
+  testImplementation 'junit:junit:4.13.2'
   implementation libs.okhttp
   implementation libs.cronet.embedded
   implementation libs.media3.datasource.okhttp

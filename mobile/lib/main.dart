@@ -19,6 +19,7 @@ import 'package:immich_mobile/domain/services/background_worker.service.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/infrastructure/repositories/network.repository.dart';
+import 'package:immich_mobile/pages/common/pholy_updates.page.dart';
 import 'package:immich_mobile/pages/common/splash_screen.page.dart';
 import 'package:immich_mobile/platform/background_worker_lock_api.g.dart';
 import 'package:immich_mobile/platform/native_sync_api.g.dart';
@@ -28,6 +29,7 @@ import 'package:immich_mobile/providers/asset_viewer/share_intent_upload.provide
 import 'package:immich_mobile/providers/infrastructure/platform.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/locale_provider.dart';
+import 'package:immich_mobile/providers/pholy_update.provider.dart';
 import 'package:immich_mobile/providers/routes.provider.dart';
 import 'package:immich_mobile/providers/theme.provider.dart';
 import 'package:immich_mobile/providers/view_intent/view_intent_handler.provider.dart';
@@ -146,6 +148,7 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
         dPrint(() => "[APP STATE] resumed");
         unawaited(ref.read(appStateProvider.notifier).handleAppResume());
         unawaited(ref.read(viewIntentHandlerProvider).onAppResumed());
+        unawaited(ref.read(pholyUpdateProvider).onResume());
       case AppLifecycleState.inactive:
         dPrint(() => "[APP STATE] inactive");
         ref.read(appStateProvider.notifier).handleAppInactivity();
@@ -245,6 +248,7 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // needs to be delayed so that EasyLocalization is working
       unawaited(ref.read(backgroundWorkerFgServiceProvider).enable());
+      unawaited(ref.read(pholyUpdateProvider).check(automatically: true));
       if (Platform.isAndroid) {
         unawaited(
           ref
@@ -298,7 +302,10 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
             password: context.t.password,
             undo: context.t.undo,
           ),
-          child: ImmichThemeProvider(colorScheme: context.colorScheme, child: child!),
+          child: ImmichThemeProvider(
+            colorScheme: context.colorScheme,
+            child: PholyUpdateNotice(child: child!),
+          ),
         ),
         routerConfig: router.config(
           deepLinkBuilder: _deepLinkBuilder,

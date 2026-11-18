@@ -6,6 +6,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:immich_mobile/constants/pholy_brand.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/theme_extensions.dart';
+import 'package:immich_mobile/pages/common/pholy_imprint.page.dart';
+import 'package:immich_mobile/pages/common/pholy_updates.page.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/widgets/forms/login/login_form.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -44,6 +46,24 @@ class LoginPage extends HookWidget {
               Text(
                 'PHOLY · ${appVersion.value}',
                 style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceSecondary),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    settings: const RouteSettings(name: 'PholyUpdatesPage'),
+                    builder: (_) => const PholyUpdatesPage(),
+                  ),
+                ),
+                child: Text(pholyText(context, 'App-Updates', 'App updates')),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    settings: const RouteSettings(name: 'PholyImprintPage'),
+                    builder: (_) => const PholyImprintPage(),
+                  ),
+                ),
+                child: Text(pholyText(context, 'Impressum', 'Legal notice')),
               ),
               TextButton(
                 onPressed: () => context.pushRoute(const AppLogRoute()),

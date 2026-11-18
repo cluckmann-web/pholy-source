@@ -23,6 +23,8 @@ enum StoreKey<T> {
 
   // Device-local PHOLY permission introduction; never sent to the platform.
   pholyIntroductionSeen<bool>._(2001),
+  pholyUpdateAutoCheck<bool>._(2002),
+  pholyUpdateLastCheck<int>._(2003),
 
   // Legacy keys that have been migrated to the new metadata store
   legacyBackupRequireCharging<bool>._(7),
