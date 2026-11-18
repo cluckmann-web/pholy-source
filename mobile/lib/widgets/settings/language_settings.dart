@@ -137,7 +137,7 @@ class _LanguageSearchBar extends StatelessWidget {
       decoration: BoxDecoration(color: context.colorScheme.surface),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: const BorderRadius.all(Radius.circular(24)),
+          borderRadius: BorderRadius.zero,
           gradient: LinearGradient(
             colors: [
               context.colorScheme.primary.withValues(alpha: 0.075),

@@ -15,7 +15,7 @@ class AlbumActionFilledButton extends StatelessWidget {
       child: OutlinedButton.icon(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           side: BorderSide(color: context.colorScheme.surfaceContainerHighest, width: 1),
           backgroundColor: context.colorScheme.surfaceContainerHigh,
         ),

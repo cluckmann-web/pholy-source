@@ -272,7 +272,7 @@ class _FreeUpSpaceSettingsState extends ConsumerState<FreeUpSpaceSettings> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: context.colorScheme.surfaceContainerLow,
-                  borderRadius: const BorderRadius.all(Radius.circular(12)),
+                  borderRadius: BorderRadius.zero,
                   border: Border.all(color: context.primaryColor.withValues(alpha: 0.25)),
                 ),
                 child: Text(context.t.free_up_space_description, style: context.textTheme.bodyMedium),
@@ -285,7 +285,7 @@ class _FreeUpSpaceSettingsState extends ConsumerState<FreeUpSpaceSettings> {
               child: Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(12)),
+                  borderRadius: BorderRadius.zero,
                   side: BorderSide(
                     color: hasKeepSettings
                         ? context.colorScheme.primary.withValues(alpha: 0.5)
@@ -543,7 +543,7 @@ class _FreeUpSpaceSettingsState extends ConsumerState<FreeUpSpaceSettings> {
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: context.colorScheme.primaryContainer.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.all(Radius.circular(12)),
+                            borderRadius: BorderRadius.zero,
                           ),
                           child: Row(
                             children: [
@@ -581,7 +581,7 @@ class _FreeUpSpaceSettingsState extends ConsumerState<FreeUpSpaceSettings> {
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.orange.withValues(alpha: 0.1),
-                            borderRadius: const BorderRadius.all(Radius.circular(8)),
+                            borderRadius: BorderRadius.zero,
                           ),
                           child: Row(
                             children: [
@@ -619,7 +619,7 @@ class _FreeUpSpaceSettingsState extends ConsumerState<FreeUpSpaceSettings> {
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: context.colorScheme.errorContainer.withValues(alpha: 0.3),
-                          borderRadius: const BorderRadius.all(Radius.circular(12)),
+                          borderRadius: BorderRadius.zero,
                           border: Border.all(color: context.colorScheme.error.withValues(alpha: 0.3)),
                         ),
                         child: hasAssets
@@ -752,13 +752,13 @@ class _DatePresetCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: isSelected ? context.colorScheme.primaryContainer.withAlpha(100) : context.colorScheme.surfaceContainer,
-      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      borderRadius: BorderRadius.zero,
       child: InkWell(
         onTap: onTap,
-        borderRadius: const BorderRadius.all(Radius.circular(12)),
+        borderRadius: BorderRadius.zero,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.zero,
             border: Border.all(color: isSelected ? context.colorScheme.primary : Colors.transparent, width: 1),
           ),
           child: Column(
@@ -826,11 +826,11 @@ class _KeepAlbumsSection extends ConsumerWidget {
             return Container(
               decoration: BoxDecoration(
                 border: Border.all(color: context.colorScheme.outlineVariant),
-                borderRadius: const BorderRadius.all(Radius.circular(12)),
+                borderRadius: BorderRadius.zero,
               ),
               constraints: const BoxConstraints(maxHeight: 200),
               child: ClipRRect(
-                borderRadius: const BorderRadius.all(Radius.circular(12)),
+                borderRadius: BorderRadius.zero,
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: albums.length,

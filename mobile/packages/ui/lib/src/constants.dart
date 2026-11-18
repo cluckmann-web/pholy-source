@@ -24,32 +24,17 @@ abstract class ImmichSpacing {
   static const double xxxl = 48.0;
 }
 
-/// Border radius constants for consistent rounded corners
+/// PHOLY controls use square corners. Preserve the upstream token API and circles.
 abstract class ImmichRadius {
   const ImmichRadius._();
 
-  /// No radius: 0.0
   static const double none = 0.0;
-
-  /// Extra small radius: 4.0
-  static const double xs = 4.0;
-
-  /// Small radius: 8.0
-  static const double sm = 8.0;
-
-  /// Medium radius (default): 12.0
-  static const double md = 12.0;
-
-  /// Large radius: 16.0
-  static const double lg = 16.0;
-
-  /// Extra large radius: 20.0
-  static const double xl = 20.0;
-
-  /// Extra extra large radius: 24.0
-  static const double xxl = 24.0;
-
-  /// Full circular radius: infinity
+  static const double xs = 0.0;
+  static const double sm = 0.0;
+  static const double md = 0.0;
+  static const double lg = 0.0;
+  static const double xl = 0.0;
+  static const double xxl = 0.0;
   static const double full = double.infinity;
 }
 

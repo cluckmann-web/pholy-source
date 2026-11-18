@@ -17,7 +17,7 @@ class LocalAlbumThumbnail extends ConsumerWidget {
           return DecoratedBox(
             decoration: BoxDecoration(
               color: context.colorScheme.surfaceContainer,
-              borderRadius: const BorderRadius.all(Radius.circular(16)),
+              borderRadius: BorderRadius.zero,
               border: Border.all(color: context.colorScheme.outline.withAlpha(50), width: 1),
             ),
             child: Icon(Icons.collections, size: 24, color: context.primaryColor),
@@ -25,7 +25,7 @@ class LocalAlbumThumbnail extends ConsumerWidget {
         }
 
         return ClipRRect(
-          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          borderRadius: BorderRadius.zero,
           child: Thumbnail.fromAsset(asset: data),
         );
       },

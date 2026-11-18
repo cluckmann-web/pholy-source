@@ -145,8 +145,8 @@ class _DateTimePicker extends HookWidget {
           ListTile(
             tileColor: context.colorScheme.surfaceContainerHighest,
             shape: ShapeBorder.lerp(
-              const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-              const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+              const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               1,
             ),
             trailing: Icon(Icons.edit_outlined, size: 18, color: context.primaryColor),

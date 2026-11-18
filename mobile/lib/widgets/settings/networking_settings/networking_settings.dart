@@ -113,7 +113,7 @@ class NetworkingSettings extends HookConsumerWidget {
           child: Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: const BorderRadius.all(Radius.circular(16)),
+              borderRadius: BorderRadius.zero,
               side: BorderSide(color: context.colorScheme.surfaceContainerHighest, width: 1),
             ),
             child: ListTile(

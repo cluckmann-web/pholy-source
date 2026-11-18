@@ -27,7 +27,7 @@ class ImmichThemeProvider extends StatelessWidget {
                 : colorScheme.outline;
             return OutlineInputBorder(
               borderSide: BorderSide(color: color),
-              borderRadius: const BorderRadius.all(Radius.circular(ImmichRadius.md)),
+              borderRadius: BorderRadius.zero,
             );
           }),
           labelStyle: WidgetStateTextStyle.resolveWith((states) {

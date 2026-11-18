@@ -1,6 +1,5 @@
-app_identifier "app.alextran.immich" # The bundle identifier of your app
-apple_id "altran@futo.org" # Your Apple email address
-
-
-# For more information about the Appfile, see:
-#     https://docs.fastlane.tools/advanced/#appfile
+# PHOLY accounts are configured outside Git. API-key lanes do not need an Apple login.
+app_identifier "de.pholy.app"
+apple_id ENV["PHOLY_APPLE_ID"] unless ENV["PHOLY_APPLE_ID"].to_s.empty?
+team_id ENV["PHOLY_APPLE_TEAM_ID"] unless ENV["PHOLY_APPLE_TEAM_ID"].to_s.empty?
+itc_team_id ENV["PHOLY_APP_STORE_CONNECT_TEAM_ID"] unless ENV["PHOLY_APP_STORE_CONNECT_TEAM_ID"].to_s.empty?

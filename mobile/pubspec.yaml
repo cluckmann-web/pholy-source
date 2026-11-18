@@ -1,8 +1,8 @@
 name: immich_mobile
-description: Immich - selfhosted backup media file on mobile phone
+description: PHOLY - private photos, albums and community, based on Immich
 
 publish_to: 'none'
-version: 3.4.1+3040199
+version: 3.4.1-pholy-mobile.1+3040201
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -150,12 +150,12 @@ flutter:
         - asset: fonts/GoogleSansCode/GoogleSansCode-SemiBold.ttf
           weight: 600
 flutter_launcher_icons:
-  image_path_android: 'assets/immich-logo.png'
-  adaptive_icon_background: '#ffffff'
-  adaptive_icon_foreground: 'assets/immich-logo-android-adaptive-icon.png'
-  image_path_ios: 'assets/immich-logo-w-bg.png'
+  image_path_android: 'assets/pholy-app-icon.png'
+  adaptive_icon_background: '#f7f7f2'
+  adaptive_icon_foreground: 'assets/pholy-adaptive-foreground.png'
+  image_path_ios: 'assets/pholy-app-icon.png'
   android: 'ic_launcher'
-  ios: false
+  ios: true
   remove_alpha_ios: true
 
 analyzer:

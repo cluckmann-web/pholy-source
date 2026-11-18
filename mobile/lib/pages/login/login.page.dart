@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:immich_mobile/constants/pholy_brand.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/theme_extensions.dart';
 import 'package:immich_mobile/routing/router.dart';
@@ -19,48 +20,36 @@ class LoginPage extends HookWidget {
 
     Future<void> getAppInfo() async {
       final PackageInfo packageInfo = await PackageInfo.fromPlatform();
-      appVersion.value = packageInfo.version;
+      if (context.mounted) {
+        appVersion.value = packageInfo.version;
+      }
     }
 
     useEffect(() {
       unawaited(getAppInfo());
       return null;
-    });
+    }, const []);
 
     return Scaffold(
       body: LoginForm(),
       bottomNavigationBar: SafeArea(
+        top: false,
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
-          child: SizedBox(
-            height: 50,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'v${appVersion.value}',
-                  style: TextStyle(
-                    color: context.colorScheme.onSurfaceSecondary,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: "GoogleSansCode",
-                  ),
-                ),
-                const Text(' '),
-                GestureDetector(
-                  child: Text(
-                    'Logs',
-                    style: TextStyle(
-                      color: context.primaryColor,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: "GoogleSansCode",
-                    ),
-                  ),
-                  onTap: () {
-                    unawaited(context.pushRoute(const AppLogRoute()));
-                  },
-                ),
-              ],
-            ),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            children: [
+              Text(
+                'PHOLY · ${appVersion.value}',
+                style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceSecondary),
+              ),
+              TextButton(
+                onPressed: () => context.pushRoute(const AppLogRoute()),
+                child: Text(pholyText(context, 'Diagnose', 'Diagnostics')),
+              ),
+            ],
           ),
         ),
       ),

@@ -7,12 +7,8 @@ class ImmichTitleText extends StatelessWidget {
   const ImmichTitleText({super.key, this.fontSize = 48});
 
   @override
-  Widget build(BuildContext context) {
-    return Image(
-      image: AssetImage(context.isDarkTheme ? 'assets/immich-text-dark.png' : 'assets/immich-text-light.png'),
-      width: fontSize * 4,
-      filterQuality: FilterQuality.high,
-      color: context.primaryColor,
-    );
-  }
+  Widget build(BuildContext context) => Text(
+    'PHOLY',
+    style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w500, letterSpacing: 3, color: context.primaryColor),
+  );
 }

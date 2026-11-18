@@ -86,7 +86,7 @@ class TagPicker extends HookConsumerWidget {
     final searchQuery = useState('');
     final tags = ref.watch(Store.tags.all());
     final selectedTagIds = useState<Set<String>>(initialSelection);
-    const borderRadius = BorderRadius.all(Radius.circular(20));
+    const borderRadius = BorderRadius.zero;
     final selectedNewTagValues = useState<Set<String>>({});
 
     return Column(

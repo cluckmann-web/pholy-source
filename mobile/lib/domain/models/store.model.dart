@@ -21,6 +21,9 @@ enum StoreKey<T> {
 
   syncMigrationStatus<String>._(1013),
 
+  // Device-local PHOLY permission introduction; never sent to the platform.
+  pholyIntroductionSeen<bool>._(2001),
+
   // Legacy keys that have been migrated to the new metadata store
   legacyBackupRequireCharging<bool>._(7),
   legacyBackupTriggerDelay<int>._(8),

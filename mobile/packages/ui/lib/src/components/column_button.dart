@@ -59,7 +59,7 @@ class _ImmichColumnButtonState extends State<ImmichColumnButton> {
         foregroundColor: foreground,
         padding: const .symmetric(horizontal: ImmichSpacing.sm, vertical: ImmichSpacing.md),
         tapTargetSize: .shrinkWrap,
-        shape: const RoundedRectangleBorder(borderRadius: .all(.circular(ImmichRadius.xl))),
+        shape: const RoundedRectangleBorder(),
       ),
       child: ConstrainedBox(
         constraints: const .new(maxWidth: 90),

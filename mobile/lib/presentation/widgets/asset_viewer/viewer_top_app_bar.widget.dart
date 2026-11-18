@@ -52,6 +52,7 @@ class ViewerTopAppBar extends ConsumerWidget implements PreferredSizeWidget {
       if (album != null && album.isActivityEnabled && album.isShared)
         IconButton(
           icon: const Icon(Icons.chat_outlined),
+          tooltip: Localizations.localeOf(context).languageCode == 'de' ? 'Albumaktivität' : 'Album activity',
           onPressed: () {
             unawaited(
               context.router.push(

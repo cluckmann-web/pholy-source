@@ -23,9 +23,16 @@ ThemeData getThemeData({required ColorScheme colorScheme, required Locale locale
     scaffoldBackgroundColor: colorScheme.surface,
     splashColor: colorScheme.primary.withValues(alpha: 0.1),
     highlightColor: colorScheme.primary.withValues(alpha: 0.1),
-    bottomSheetTheme: BottomSheetThemeData(backgroundColor: colorScheme.surfaceContainer),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: colorScheme.surfaceContainer,
+      shape: const RoundedRectangleBorder(),
+    ),
+    cardTheme: const CardThemeData(shape: RoundedRectangleBorder(), elevation: 0),
+    listTileTheme: const ListTileThemeData(shape: RoundedRectangleBorder()),
+    drawerTheme: const DrawerThemeData(shape: RoundedRectangleBorder()),
     fontFamily: _getFontFamilyFromLocale(locale),
     snackBarTheme: SnackBarThemeData(
+      shape: const RoundedRectangleBorder(),
       contentTextStyle: TextStyle(
         fontFamily: _getFontFamilyFromLocale(locale),
         color: colorScheme.primary,
@@ -57,55 +64,71 @@ ThemeData getThemeData({required ColorScheme colorScheme, required Locale locale
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: colorScheme.primary,
-        foregroundColor: isDark ? Colors.black87 : Colors.white,
+        foregroundColor: colorScheme.onPrimary,
+        shape: const RoundedRectangleBorder(),
+        minimumSize: const Size(48, 48),
       ),
     ),
-    chipTheme: const ChipThemeData(side: BorderSide.none),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(shape: const RoundedRectangleBorder(), minimumSize: const Size(48, 48)),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(shape: const RoundedRectangleBorder(), minimumSize: const Size(48, 48)),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(shape: const RoundedRectangleBorder(), minimumSize: const Size(48, 48)),
+    ),
+    chipTheme: const ChipThemeData(side: BorderSide.none, shape: RoundedRectangleBorder()),
     sliderTheme: const SliderThemeData(
       trackHeight: 12,
       // ignore: deprecated_member_use
       year2023: false,
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(type: BottomNavigationBarType.fixed),
-    popupMenuTheme: const PopupMenuThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-    ),
+    popupMenuTheme: const PopupMenuThemeData(shape: RoundedRectangleBorder()),
+    navigationRailTheme: const NavigationRailThemeData(indicatorShape: RoundedRectangleBorder()),
     navigationBarTheme: NavigationBarThemeData(
+      indicatorShape: const RoundedRectangleBorder(),
       backgroundColor: isDark ? colorScheme.surfaceContainer : colorScheme.surface,
       labelTextStyle: const WidgetStatePropertyAll(
         TextStyle(fontSize: 14, fontWeight: FontWeight.w500, overflow: TextOverflow.ellipsis),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
+      border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+      errorBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: colorScheme.error),
+        borderRadius: BorderRadius.zero,
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: colorScheme.error, width: 2),
+        borderRadius: BorderRadius.zero,
+      ),
       focusedBorder: OutlineInputBorder(
         borderSide: BorderSide(color: colorScheme.primary),
-        borderRadius: const BorderRadius.all(Radius.circular(15)),
+        borderRadius: BorderRadius.zero,
       ),
       enabledBorder: OutlineInputBorder(
         borderSide: BorderSide(color: colorScheme.outlineVariant),
-        borderRadius: const BorderRadius.all(Radius.circular(15)),
+        borderRadius: BorderRadius.zero,
       ),
       labelStyle: TextStyle(color: colorScheme.primary),
       hintStyle: const TextStyle(fontSize: 14.0, fontWeight: FontWeight.normal),
     ),
     textSelectionTheme: TextSelectionThemeData(cursorColor: colorScheme.primary),
     dropdownMenuTheme: DropdownMenuThemeData(
-      menuStyle: const MenuStyle(
-        shape: WidgetStatePropertyAll<OutlinedBorder>(
-          RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(15))),
-        ),
-      ),
+      menuStyle: const MenuStyle(shape: WidgetStatePropertyAll<OutlinedBorder>(RoundedRectangleBorder())),
       inputDecorationTheme: InputDecorationTheme(
         focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: colorScheme.primary)),
         enabledBorder: OutlineInputBorder(
           borderSide: BorderSide(color: colorScheme.outlineVariant),
-          borderRadius: const BorderRadius.all(Radius.circular(15)),
+          borderRadius: BorderRadius.zero,
         ),
         labelStyle: TextStyle(color: colorScheme.primary),
         hintStyle: const TextStyle(fontSize: 14.0, fontWeight: FontWeight.normal),
       ),
     ),
-    dialogTheme: DialogThemeData(backgroundColor: colorScheme.surfaceContainer),
+    dialogTheme: DialogThemeData(backgroundColor: colorScheme.surfaceContainer, shape: const RoundedRectangleBorder()),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
       // ignore: deprecated_member_use
       year2023: false,

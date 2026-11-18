@@ -13,11 +13,11 @@ import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/platform_extensions.dart';
 import 'package:immich_mobile/extensions/scroll_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
+import 'package:immich_mobile/pholy/comments/viewer_comments.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/download_status_floating_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/asset_page.widget.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/asset_preloader.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/asset_stack.provider.dart';
-import 'package:immich_mobile/presentation/widgets/asset_viewer/viewer_bottom_app_bar.widget.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/viewer_top_app_bar.widget.dart';
 import 'package:immich_mobile/providers/asset_viewer/asset_viewer.provider.dart';
 import 'package:immich_mobile/providers/cast.provider.dart';
@@ -266,6 +266,7 @@ class _AssetViewerState extends ConsumerState<AssetViewer> {
     final showingControls = ref.watch(assetViewerProvider.select((s) => s.showingControls));
     final showingDetails = ref.watch(assetViewerProvider.select((s) => s.showingDetails));
     final isZoomed = ref.watch(assetViewerProvider.select((s) => s.isZoomed));
+    final reserveCommentsSpace = showingControls && !showingDetails && viewerPhotoCommentContext(ref) != null;
     final backgroundColor = showingDetails
         ? context.colorScheme.surface
         : Colors.black.withValues(alpha: ref.watch(assetViewerProvider.select((s) => s.backgroundOpacity)));
@@ -291,7 +292,7 @@ class _AssetViewerState extends ConsumerState<AssetViewer> {
         backgroundColor: backgroundColor,
         resizeToAvoidBottomInset: false,
         appBar: const ViewerTopAppBar(),
-        extendBody: true,
+        extendBody: !reserveCommentsSpace,
         extendBodyBehindAppBar: true,
         floatingActionButton: IgnorePointer(
           ignoring: !showingControls,
@@ -301,35 +302,43 @@ class _AssetViewerState extends ConsumerState<AssetViewer> {
             child: const DownloadStatusFloatingButton(),
           ),
         ),
-        bottomNavigationBar: const ViewerBottomAppBar(),
-        body: Stack(
-          children: [
-            NotificationListener<ScrollEndNotification>(
-              onNotification: _onScrollEnd,
-              child: PhotoViewGestureDetectorScope(
-                axis: Axis.horizontal,
-                child: PageView.builder(
-                  controller: _pageController,
-                  physics: isZoomed
-                      ? const NeverScrollableScrollPhysics()
-                      : CurrentPlatform.isIOS
-                      ? const FastScrollPhysics()
-                      : const FastClampingScrollPhysics(),
-                  itemCount: _totalAssets,
-                  itemBuilder: (context, index) =>
-                      AssetPage(index: index, heroOffset: _heroOffset, onTapNavigate: _onTapNavigate),
+        bottomNavigationBar: const PholyViewerCommentsBar(),
+        body: LayoutBuilder(
+          builder: (context, constraints) => MediaQuery(
+            // Upstream AssetPage sizes its photo/details using MediaQuery. Give
+            // it the actual photo viewport so the comment panel does not cover
+            // or crop the lower half of the image.
+            data: MediaQuery.of(context).copyWith(size: constraints.biggest),
+            child: Stack(
+              children: [
+                NotificationListener<ScrollEndNotification>(
+                  onNotification: _onScrollEnd,
+                  child: PhotoViewGestureDetectorScope(
+                    axis: Axis.horizontal,
+                    child: PageView.builder(
+                      controller: _pageController,
+                      physics: isZoomed
+                          ? const NeverScrollableScrollPhysics()
+                          : CurrentPlatform.isIOS
+                          ? const FastScrollPhysics()
+                          : const FastClampingScrollPhysics(),
+                      itemCount: _totalAssets,
+                      itemBuilder: (context, index) =>
+                          AssetPage(index: index, heroOffset: _heroOffset, onTapNavigate: _onTapNavigate),
+                    ),
+                  ),
                 ),
-              ),
+                if (!CurrentPlatform.isIOS)
+                  IgnorePointer(
+                    child: AnimatedContainer(
+                      duration: Durations.short2,
+                      color: Colors.black.withValues(alpha: showingDetails ? 0.6 : 0.0),
+                      height: context.padding.top,
+                    ),
+                  ),
+              ],
             ),
-            if (!CurrentPlatform.isIOS)
-              IgnorePointer(
-                child: AnimatedContainer(
-                  duration: Durations.short2,
-                  color: Colors.black.withValues(alpha: showingDetails ? 0.6 : 0.0),
-                  height: context.padding.top,
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );

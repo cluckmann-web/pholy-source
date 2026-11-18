@@ -17,13 +17,13 @@ class SettingsCard extends StatelessWidget {
         elevation: 0,
         clipBehavior: Clip.antiAlias,
         color: context.colorScheme.surfaceContainer,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+        shape: const RoundedRectangleBorder(),
         margin: const EdgeInsets.symmetric(vertical: 4.0),
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
           leading: Container(
             decoration: BoxDecoration(
-              borderRadius: const BorderRadius.all(Radius.circular(16)),
+              borderRadius: BorderRadius.zero,
               color: context.isDarkTheme ? Colors.black26 : Colors.white.withAlpha(100),
             ),
             padding: const EdgeInsets.all(16.0),

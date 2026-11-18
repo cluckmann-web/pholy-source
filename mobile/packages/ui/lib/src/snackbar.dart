@@ -56,7 +56,7 @@ class SnackbarManager {
       behavior: .floating,
       backgroundColor: background,
       duration: duration,
-      shape: const RoundedRectangleBorder(borderRadius: .all(.circular(ImmichRadius.sm))),
+      shape: const RoundedRectangleBorder(),
       // A snackbar carrying an action stays up until it is tapped by default; our actions are optional
       persist: false,
       content: Row(

@@ -17,6 +17,15 @@ default_platform(:android)
 
 platform :android do
   before_all do
+    # Existing store lanes require explicit PHOLY credentials; test APKs use Flutter directly.
+    key_file = ENV["PHOLY_GOOGLE_PLAY_JSON_KEY"].to_s
+    if key_file.empty? || !File.file?(key_file)
+      UI.user_error!("Set PHOLY_GOOGLE_PLAY_JSON_KEY to an external PHOLY Play service-account JSON file before using a store lane.")
+    end
+    if ENV["PHOLY_ANDROID_TEST_BUILD"] == "true" || !ENV["PR_NUMBER"].to_s.empty?
+      UI.user_error!("Store lanes target de.pholy.app. Build PHOLY test/PR APKs with Flutter instead.")
+    end
+
     # Gradle needs Flutter's GeneratedPluginRegistrant generation
     Dir.chdir("../..") { sh("flutter", "build", "apk", "--release", "--config-only") }
   end

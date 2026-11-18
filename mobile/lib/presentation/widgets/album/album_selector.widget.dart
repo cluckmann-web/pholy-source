@@ -286,9 +286,7 @@ class _SortButtonState extends ConsumerState<_SortButton> {
       controller: widget.controller,
       style: MenuStyle(
         elevation: const WidgetStatePropertyAll(1),
-        shape: WidgetStateProperty.all(
-          const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(24))),
-        ),
+        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
         padding: const WidgetStatePropertyAll(EdgeInsets.all(4)),
       ),
       consumeOutsideTap: true,
@@ -316,9 +314,7 @@ class _SortButtonState extends ConsumerState<_SortButton> {
                 backgroundColor: WidgetStateProperty.all(
                   albumSortOption == sortMode ? context.colorScheme.primary : Colors.transparent,
                 ),
-                shape: WidgetStateProperty.all(
-                  const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
+                shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
               ),
               child: Text(
                 sortMode.label(context.t),
@@ -393,7 +389,7 @@ class _SearchBar extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(color: context.colorScheme.onSurface.withAlpha(0), width: 0),
-            borderRadius: const BorderRadius.all(Radius.circular(24)),
+            borderRadius: BorderRadius.zero,
             gradient: LinearGradient(
               colors: [
                 context.colorScheme.primary.withValues(alpha: 0.075),
@@ -492,7 +488,7 @@ class _QuickFilterButton extends StatelessWidget {
         backgroundColor: WidgetStateProperty.all(isSelected ? context.colorScheme.primary : Colors.transparent),
         shape: WidgetStateProperty.all(
           RoundedRectangleBorder(
-            borderRadius: const BorderRadius.all(Radius.circular(20)),
+            borderRadius: BorderRadius.zero,
             side: BorderSide(color: context.colorScheme.onSurface.withAlpha(25), width: 1),
           ),
         ),
@@ -672,7 +668,7 @@ class _GridAlbumCard extends ConsumerWidget {
         elevation: 0,
         color: context.colorScheme.surfaceBright,
         shape: RoundedRectangleBorder(
-          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          borderRadius: BorderRadius.zero,
           side: BorderSide(color: context.colorScheme.onSurface.withAlpha(25), width: 1),
         ),
         child: Column(
@@ -681,7 +677,7 @@ class _GridAlbumCard extends ConsumerWidget {
             Expanded(
               flex: 2,
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                borderRadius: BorderRadius.zero,
                 child: SizedBox(
                   width: double.infinity,
                   child: FutureBuilder(

@@ -19,7 +19,7 @@ class ConfirmDialog extends StatelessWidget {
     }
 
     return AlertDialog(
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       title: Text(title),
       content: Text(content),
       actions: [

@@ -123,7 +123,7 @@ class _ServerInfoItem extends StatelessWidget {
           verticalOffset: 0,
           decoration: BoxDecoration(
             color: context.primaryColor.withValues(alpha: 0.9),
-            borderRadius: const BorderRadius.all(Radius.circular(10)),
+            borderRadius: BorderRadius.zero,
           ),
           textStyle: TextStyle(color: context.colorScheme.onPrimary, fontWeight: FontWeight.bold),
           message: text,

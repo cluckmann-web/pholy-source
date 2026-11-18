@@ -37,13 +37,14 @@ android {
   }
 
   defaultConfig {
-    applicationId "app.alextran.immich"
+    applicationId "de.pholy.app"
     minSdk = 26
     targetSdk = flutter.targetSdkVersion
     versionCode flutter.versionCode
     versionName flutter.versionName
-    resValue "string", "app_name", "Immich"
-    buildConfigField "boolean", "PASSKEYS", "true"
+    resValue "string", "app_name", "PHOLY"
+    // Enable only after the PHOLY signing certificate/domain association is installed.
+    buildConfigField "boolean", "PASSKEYS", "false"
   }
 
   signingConfigs {
@@ -54,7 +55,7 @@ android {
 
       keyAlias keyAliasVal ?: keystoreProperties['keyAlias']
       keyPassword keyPasswordVal ?: keystoreProperties['keyPassword']
-      storeFile file("../key.jks").exists() ? file("../key.jks") : file(keystoreProperties['storeFile'] ?: '../key.jks')
+      storeFile file(System.getenv("PHOLY_ANDROID_KEYSTORE") ?: keystoreProperties['storeFile'] ?: '../key.jks')
       storePassword storePasswordVal ?: keystoreProperties['storePassword']
     }
   }
@@ -66,7 +67,7 @@ android {
     }
 
     release {
-      def hasKeystore = file("../key.jks").exists() && file("../key.jks").length() > 0
+      def hasKeystore = signingConfigs.release.storeFile.exists() && signingConfigs.release.storeFile.length() > 0
       signingConfig hasKeystore ? signingConfigs.release : signingConfigs.debug
       proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 
@@ -74,7 +75,13 @@ android {
       if (prNumber) {
         applicationIdSuffix ".pr${prNumber}"
         versionNameSuffix "-pr${prNumber}"
-        resValue "string", "app_name", "Immich PR ${prNumber}"
+        resValue "string", "app_name", "PHOLY PR ${prNumber}"
+      }
+
+      // Test releases install independently from the future store build.
+      if (System.getenv("PHOLY_ANDROID_TEST_BUILD") == "true") {
+        applicationIdSuffix ".test"
+        resValue "string", "app_name", "PHOLY Test"
       }
     }
   }

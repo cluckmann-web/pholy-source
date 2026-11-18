@@ -108,7 +108,7 @@ class PrimaryColorSetting extends HookConsumerWidget {
                 dense: true,
                 activeThumbColor: context.primaryColor,
                 tileColor: context.colorScheme.surfaceContainerHigh,
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(15))),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                 title: Text(
                   context.t.theme_setting_system_primary_color_title,
                   style: context.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500, height: 1.5),

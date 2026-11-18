@@ -38,7 +38,7 @@ class AlbumTile extends ConsumerWidget {
         builder: (context, snapshot) {
           return snapshot.hasData && snapshot.data != null
               ? ClipRRect(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderRadius: BorderRadius.zero,
                   child: SizedBox(
                     width: 80,
                     height: 80,
@@ -54,7 +54,7 @@ class AlbumTile extends ConsumerWidget {
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: context.colorScheme.surfaceContainer,
-                      borderRadius: const BorderRadius.all(Radius.circular(16)),
+                      borderRadius: BorderRadius.zero,
                       border: Border.all(color: context.colorScheme.outline.withAlpha(50), width: 1),
                     ),
                     child: const Icon(Icons.photo_album_rounded, size: 24, color: Colors.grey),

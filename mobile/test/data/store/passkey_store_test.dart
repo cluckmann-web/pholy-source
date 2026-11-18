@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/data/server/passkey.dart';
 import 'package:immich_mobile/data/store.dart';
+import 'package:immich_mobile/data/store/passkey.dart';
 import 'package:immich_mobile/models/auth/login_response.model.dart';
 import 'package:immich_mobile/models/server_info/server_version.model.dart';
 import 'package:immich_mobile/platform/passkey_api.g.dart';
@@ -26,10 +27,11 @@ void main() {
     hostApi = _MockPasskeyHostApi();
   });
 
-  ProviderContainer createContainer({bool supportsPasskeys = true}) {
+  ProviderContainer createContainer({bool supportsPasskeys = true, bool pholyPasskeysConfigured = true}) {
     final version = ServerVersion(major: 2, minor: 0, patch: 0, supportsPasskeys: supportsPasskeys);
     final container = ProviderContainer(
       overrides: [
+        pholyPasskeysConfiguredProvider.overrideWithValue(pholyPasskeysConfigured),
         passkeyApiRepositoryProvider.overrideWithValue(api),
         passkeyHostApiProvider.overrideWithValue(hostApi),
         serverInfoProvider.overrideWith((ref) => StubServerInfoNotifier(MockServerInfoService(), version: version)),
@@ -40,6 +42,12 @@ void main() {
   }
 
   group('enabled', () {
+    test('requires PHOLY signing and domain configuration before probing the platform or server', () async {
+      expect(await createContainer(pholyPasskeysConfigured: false).read(Store.passkeys.enabled().future), isFalse);
+      verifyNever(() => hostApi.isSupported());
+      verifyNever(() => api.isEnabled());
+    });
+
     test('is true when the OS supports passkeys and the server has them on', () async {
       when(() => hostApi.isSupported()).thenAnswer((_) async => true);
       when(() => api.isEnabled()).thenAnswer((_) async => true);

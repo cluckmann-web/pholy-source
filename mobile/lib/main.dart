@@ -17,7 +17,6 @@ import 'package:immich_mobile/constants/locales.dart';
 import 'package:immich_mobile/data/store.dart';
 import 'package:immich_mobile/domain/services/background_worker.service.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
-import 'package:immich_mobile/generated/codegen_loader.g.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/infrastructure/repositories/network.repository.dart';
 import 'package:immich_mobile/pages/common/splash_screen.page.dart';
@@ -43,6 +42,7 @@ import 'package:immich_mobile/utils/debug_print.dart';
 import 'package:immich_mobile/utils/fallback_localizations.dart';
 import 'package:immich_mobile/utils/licenses.dart';
 import 'package:immich_mobile/utils/migration.dart';
+import 'package:immich_mobile/utils/pholy_asset_loader.dart';
 import 'package:immich_mobile/wm_executor.dart';
 import 'package:immich_ui/immich_ui.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -124,6 +124,7 @@ Future<void> initApp() async {
   unawaited(FileDownloader().trackTasks());
 
   LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(['PHOLY / Immich'], await rootBundle.loadString('assets/AGPL-3.0.txt'));
     for (final license in nonPubLicenses.entries) {
       yield LicenseEntryWithLineBreaks([license.key], license.value);
     }
@@ -197,9 +198,9 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
     final isColdStart = currentRouteName == null || currentRouteName == SplashScreenRoute.name;
 
     PageRouteInfo? route;
-    if (deepLink.uri.scheme == "immich") {
+    if (deepLink.uri.scheme == "pholy") {
       route = await deepLinkHandler.handleScheme(deepLink, ref);
-    } else if (deepLink.uri.host == "my.immich.app") {
+    } else if (deepLink.uri.host == "pholy.de") {
       route = await deepLinkHandler.handleMyImmichApp(deepLink, ref);
     } else {
       return DeepLink.path(deepLink.path);
@@ -282,7 +283,7 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
     return ProviderScope(
       overrides: [localeProvider.overrideWithValue(context.locale)],
       child: MaterialApp.router(
-        title: 'Immich',
+        title: 'PHOLY',
         debugShowCheckedModeBanner: true,
         scaffoldMessengerKey: scaffoldMessengerKey,
         localizationsDelegates: [...context.localizationDelegates, ...fallbackLocalizationDelegates],
@@ -318,7 +319,7 @@ class MainWidget extends StatelessWidget {
       path: translationsPath,
       useFallbackTranslations: true,
       fallbackLocale: locales.values.first,
-      assetLoader: const CodegenLoader(),
+      assetLoader: const PholyAssetLoader(),
       child: const ImmichApp(),
     );
   }

@@ -35,6 +35,7 @@ import 'package:immich_mobile/pages/login/login.page.dart';
 import 'package:immich_mobile/pages/search/map/map_location_picker.page.dart';
 import 'package:immich_mobile/pages/settings/sync_status.page.dart';
 import 'package:immich_mobile/pages/share_intent/share_intent.page.dart';
+import 'package:immich_mobile/pholy/community/community.page.dart';
 import 'package:immich_mobile/presentation/pages/activities.page.dart';
 import 'package:immich_mobile/presentation/pages/album.page.dart';
 import 'package:immich_mobile/presentation/pages/album_options.page.dart';
@@ -126,6 +127,7 @@ class AppRouter extends RootStackRouter {
         AutoRoute(page: SearchRoute.page, guards: [_authGuard, _duplicateGuard], maintainState: false),
         AutoRoute(page: LibraryRoute.page, guards: [_authGuard, _duplicateGuard]),
         AutoRoute(page: AlbumsRoute.page, guards: [_authGuard, _duplicateGuard]),
+        AutoRoute(page: PholyCommunityRoute.page, guards: [_authGuard, _duplicateGuard]),
       ],
     ),
     AutoRoute(page: ProfilePictureCropRoute.page),

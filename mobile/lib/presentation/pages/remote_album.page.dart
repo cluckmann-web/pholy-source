@@ -288,9 +288,8 @@ class _EditAlbumDialogState extends ConsumerState<_EditAlbumDialog> {
         return;
       }
 
-      Navigator.of(
-        context,
-      ).pop(_EditAlbumData(name: newTitle, description: newDescription.isEmpty ? null : newDescription));
+      Navigator.of(context)
+          .pop(_EditAlbumData(name: newTitle, description: newDescription.isEmpty ? null : newDescription));
     } catch (e) {
       if (!mounted) {
         return;
@@ -304,7 +303,7 @@ class _EditAlbumDialogState extends ConsumerState<_EditAlbumDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       insetPadding: const EdgeInsets.all(24),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: SingleChildScrollView(
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -335,7 +334,7 @@ class _EditAlbumDialogState extends ConsumerState<_EditAlbumDialog> {
                   maxLines: 1,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: InputDecoration(
-                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
                     filled: true,
                     fillColor: context.colorScheme.surface,
                   ),
@@ -360,7 +359,7 @@ class _EditAlbumDialogState extends ConsumerState<_EditAlbumDialog> {
                   maxLines: 4,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: InputDecoration(
-                    border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
                     filled: true,
                     fillColor: context.colorScheme.surface,
                   ),

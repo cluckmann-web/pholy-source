@@ -11,6 +11,11 @@ import 'package:logging/logging.dart';
 
 final _log = Logger("PasskeyStore");
 
+/// Enabled only after the PHOLY signing identity and domain associations exist.
+final pholyPasskeysConfiguredProvider = Provider<bool>(
+  (_) => const bool.fromEnvironment('PHOLY_ENABLE_PASSKEYS', defaultValue: false),
+);
+
 /// Passkeys the current user can log in with
 ///
 /// All operations directly access the HTTP API, and creating or using one also shows the system's passkey prompt
@@ -27,6 +32,11 @@ extension type const PasskeyStore._(Provider<PasskeyMutations> _provider) implem
 }
 
 final _enabledProvider = FutureProvider.autoDispose<bool>((ref) async {
+  // PHOLY has its own package and signing identity. Do not offer platform
+  // passkeys before its Android assetlinks/iOS webcredentials are configured.
+  if (!ref.watch(pholyPasskeysConfiguredProvider)) {
+    return false;
+  }
   if (!ref.watch(serverInfoProvider.select((state) => state.serverVersion.supportsPasskeys))) {
     return false;
   }

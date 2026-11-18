@@ -13,22 +13,48 @@
 # Uncomment the line if you want fastlane to automatically update itself
 # update_fastlane
 
+require 'shellwords'
+
 default_platform(:ios)
 
 platform :ios do
-  # Constants
-  TEAM_ID = "2W7AC6T8T5"
-  CODE_SIGN_IDENTITY = "Apple Distribution: FUTO Holdings, Inc. (#{TEAM_ID})"
-  BASE_BUNDLE_ID = "app.alextran.immich"
-  DEV_BUNDLE_ID  = "tech.futo.immich.testflight"
-  DEV_GROUP_ID   = "group.app.immich.share.testflight"
+  # Match Signing.xcconfig. No upstream signing or store account is inherited.
+  TEAM_ID = ENV["PHOLY_APPLE_TEAM_ID"]
+  CODE_SIGN_IDENTITY = ENV["PHOLY_IOS_CODE_SIGN_IDENTITY"]
+  BASE_BUNDLE_ID = "de.pholy.app"
+  DEV_BUNDLE_ID = "de.pholy.app.profile"
+  BASE_GROUP_ID = "group.de.pholy.app.share"
+  DEV_GROUP_ID = "#{BASE_GROUP_ID}.profile"
 
-  # Helper method to get App Store Connect API key
+  def required_pholy_env(name)
+    value = ENV[name].to_s.strip
+    UI.user_error!("Set #{name} explicitly for PHOLY before using this Fastlane lane.") if value.empty?
+    value
+  end
+
+  before_all do |lane|
+    required_pholy_env("PHOLY_APPLE_TEAM_ID")
+    required_pholy_env("PHOLY_IOS_CODE_SIGN_IDENTITY")
+    case lane.to_sym
+    when :gha_testflight_dev
+      required_pholy_env("PHOLY_APP_STORE_PROFILE_APP_ID")
+    when :gha_release_prod, :release_manual
+      required_pholy_env("PHOLY_APP_STORE_APP_ID")
+    end
+    if lane.to_sym == :release_manual
+      required_pholy_env("PHOLY_APPLE_ID")
+      required_pholy_env("PHOLY_APP_STORE_CONNECT_TEAM_ID")
+    end
+  end
+
+  # Signing material stays in an explicitly configured file outside Git.
   def get_api_key
+    key_path = required_pholy_env("PHOLY_APP_STORE_CONNECT_API_KEY_PATH")
+    UI.user_error!("PHOLY_APP_STORE_CONNECT_API_KEY_PATH must point to an existing external .p8 file.") unless File.file?(key_path)
     app_store_connect_api_key(
-      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
-      issuer_id: ENV["APP_STORE_CONNECT_API_KEY_ISSUER_ID"],
-      key_filepath: "#{Dir.home}/.appstoreconnect/private_keys/AuthKey_#{ENV['APP_STORE_CONNECT_API_KEY_ID']}.p8",
+      key_id: required_pholy_env("APP_STORE_CONNECT_API_KEY_ID"),
+      issuer_id: required_pholy_env("APP_STORE_CONNECT_API_KEY_ISSUER_ID"),
+      key_filepath: key_path,
       duration: 1200,
       in_house: false
     )
@@ -42,10 +68,14 @@ platform :ios do
   end
   
   # Helper method to assemble xcargs with optional CUSTOM_GROUP_ID override
-  def build_xcargs(group_id: nil)
-    args = "-skipMacroValidation CODE_SIGN_IDENTITY='#{CODE_SIGN_IDENTITY}' CODE_SIGN_STYLE=Manual"
-    args += " CUSTOM_GROUP_ID='#{group_id}'" if group_id
-    args
+  def build_xcargs(group_id: BASE_GROUP_ID)
+    Shellwords.join([
+      "-skipMacroValidation",
+      "CODE_SIGN_IDENTITY=#{CODE_SIGN_IDENTITY}",
+      "CODE_SIGN_STYLE=Manual",
+      "DEVELOPMENT_TEAM=#{TEAM_ID}",
+      "CUSTOM_GROUP_ID=#{group_id || BASE_GROUP_ID}"
+    ])
   end
 
   # Helper method to get version from pubspec.yaml
@@ -60,12 +90,12 @@ def get_version_from_pubspec
 end
   
   # Helper method to configure code signing for all targets
-  def configure_code_signing(base_bundle_id:, profile_name_main:, profile_name_share:, profile_name_widget:)
+  def configure_code_signing(base_bundle_id:, profile_name_main: nil, profile_name_share: nil, profile_name_widget: nil, automatic: false)
     # Runner (main app)
     update_code_signing_settings(
-      use_automatic_signing: false,
+      use_automatic_signing: automatic,
       path: "./Runner.xcodeproj",
-      team_id: ENV["FASTLANE_TEAM_ID"] || TEAM_ID,
+      team_id: TEAM_ID,
       code_sign_identity: CODE_SIGN_IDENTITY,
       bundle_identifier: base_bundle_id,
       profile_name: profile_name_main,
@@ -74,9 +104,9 @@ end
 
     # ShareExtension
     update_code_signing_settings(
-      use_automatic_signing: false,
+      use_automatic_signing: automatic,
       path: "./Runner.xcodeproj",
-      team_id: ENV["FASTLANE_TEAM_ID"] || TEAM_ID,
+      team_id: TEAM_ID,
       code_sign_identity: CODE_SIGN_IDENTITY,
       bundle_identifier: "#{base_bundle_id}.ShareExtension",
       profile_name: profile_name_share,
@@ -85,9 +115,9 @@ end
 
     # WidgetExtension
     update_code_signing_settings(
-      use_automatic_signing: false,
+      use_automatic_signing: automatic,
       path: "./Runner.xcodeproj",
-      team_id: ENV["FASTLANE_TEAM_ID"] || TEAM_ID,
+      team_id: TEAM_ID,
       code_sign_identity: CODE_SIGN_IDENTITY,
       bundle_identifier: "#{base_bundle_id}.Widget",
       profile_name: profile_name_widget,
@@ -99,6 +129,7 @@ end
   def build_and_upload(
     api_key:,
     base_bundle_id:,
+    app_store_app_id:,
     configuration: "Release",
     distribute_external: true,
     version_number: nil,
@@ -147,6 +178,8 @@ end
     # Upload to TestFlight
     upload_to_testflight(
       api_key: api_key,
+      app_identifier: base_bundle_id,
+      apple_id: app_store_app_id,
       skip_waiting_for_build_processing: true,
       distribute_external: distribute_external
     )
@@ -180,6 +213,7 @@ end
     build_and_upload(
       api_key: api_key,
       base_bundle_id: DEV_BUNDLE_ID,
+      app_store_app_id: required_pholy_env("PHOLY_APP_STORE_PROFILE_APP_ID"),
       configuration: "Profile",
       distribute_external: false,
       profile_name_main: main_profile_name,
@@ -217,6 +251,7 @@ end
     build_and_upload(
       api_key: api_key,
       base_bundle_id: BASE_BUNDLE_ID,
+      app_store_app_id: required_pholy_env("PHOLY_APP_STORE_APP_ID"),
       version_number: get_version_from_pubspec,
       distribute_external: false,
       profile_name_main: main_profile_name,
@@ -227,16 +262,13 @@ end
 
   desc "iOS Manual Release"
   lane :release_manual do
-    enable_automatic_code_signing(
-      path: "./Runner.xcodeproj",
-      targets: ["Runner", "ShareExtension", "WidgetExtension"]
-    )
+    configure_code_signing(base_bundle_id: BASE_BUNDLE_ID, automatic: true)
 
     increment_version_number(
       version_number: get_version_from_pubspec
     )
     increment_build_number(
-      build_number: latest_testflight_build_number + 1,
+      build_number: latest_testflight_build_number(app_identifier: BASE_BUNDLE_ID) + 1,
     )
     
     # Build archive with automatic signing
@@ -246,7 +278,10 @@ end
       configuration: "Release",
       export_method: "app-store",
       skip_package_ipa: false,
-      xcargs: "-skipMacroValidation -allowProvisioningUpdates",
+      xcargs: Shellwords.join([
+        "-skipMacroValidation", "-allowProvisioningUpdates",
+        "DEVELOPMENT_TEAM=#{TEAM_ID}", "CUSTOM_GROUP_ID=#{BASE_GROUP_ID}"
+      ]),
       export_options: {
         method: "app-store",
         signingStyle: "automatic",
@@ -257,6 +292,8 @@ end
     )
     
     upload_to_testflight(
+      app_identifier: BASE_BUNDLE_ID,
+      apple_id: required_pholy_env("PHOLY_APP_STORE_APP_ID"),
       skip_waiting_for_build_processing: true
     )
   end

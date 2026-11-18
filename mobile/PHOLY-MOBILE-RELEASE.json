@@ -1,0 +1,13 @@
+{
+  "application": "PHOLY",
+  "release": "3.4.1-pholy-mobile.1",
+  "build_number": 3040201,
+  "server_release": "3.4.1-pholy.16",
+  "server_base_commit": "3902eeb36c0a61ff0cccc307091b07d776b0193a",
+  "android_application_id": "de.pholy.app",
+  "android_test_application_id": "de.pholy.app.test",
+  "ios_bundle_id": "de.pholy.app",
+  "server_url": "https://pholy.de",
+  "source": "https://github.com/cluckmann-web/pholy-source/tree/releases/pholy-mobile-3.4.1-test.1",
+  "distribution": "invitation-only Android test, not a store release"
+}

@@ -83,7 +83,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<LoginResponse> login(String email, String password) async {
     final response = await _authService.login(email, password);
-    await saveAuthInfo(accessToken: response.accessToken);
+    if (!await saveAuthInfo(accessToken: response.accessToken)) {
+      await Store.delete(StoreKey.accessToken);
+      await _widgetService.clearCredentials();
+      await _apiService.updateHeaders();
+      throw ApiException(401, 'PHOLY could not establish an authenticated session');
+    }
     return response;
   }
 

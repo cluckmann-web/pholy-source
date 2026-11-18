@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart' hide Store;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/constants/pholy_brand.dart';
 import 'package:immich_mobile/data/store/passkey.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
@@ -17,6 +18,7 @@ import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
 import 'package:immich_mobile/models/auth/login_response.model.dart';
+import 'package:immich_mobile/pages/login/pholy_password_recovery.page.dart';
 import 'package:immich_mobile/providers/auth.provider.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
 import 'package:immich_mobile/providers/feature_message.provider.dart';
@@ -33,11 +35,10 @@ import 'package:immich_mobile/utils/semver.dart';
 import 'package:immich_mobile/utils/url_helper.dart';
 import 'package:immich_mobile/utils/version_compatibility.dart';
 import 'package:immich_mobile/widgets/common/immich_logo.dart';
-import 'package:immich_mobile/widgets/common/immich_title_text.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
+import 'package:immich_mobile/widgets/forms/login/pholy_introduction.dart';
 import 'package:immich_ui/immich_ui.dart';
 import 'package:logging/logging.dart';
-import 'package:openapi/api.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class LoginForm extends HookConsumerWidget {
@@ -45,12 +46,9 @@ class LoginForm extends HookConsumerWidget {
 
   final log = Logger('LoginForm');
 
-  String? _validateUrl(String? url) =>
-      normalizeAndValidateServerUrl(url) ? null : StaticTranslations.instance.login_form_err_invalid_url;
-
   String? _validateEmail(String? email) {
     if (email == null || email == '') {
-      return null;
+      return StaticTranslations.instance.login_form_err_invalid_email;
     }
     if (email.endsWith(' ')) {
       return StaticTranslations.instance.login_form_err_trailing_whitespace;
@@ -68,129 +66,85 @@ class LoginForm extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final emailController = useTextEditingController.fromValue(TextEditingValue.empty);
     final passwordController = useTextEditingController.fromValue(TextEditingValue.empty);
-    final serverEndpointController = useTextEditingController.fromValue(TextEditingValue.empty);
+    final serverEndpointController = useTextEditingController(text: PholyBrand.serverUrl);
     final passwordFocusNode = useFocusNode();
     final isOauthEnable = useState<bool>(false);
     final isPasswordLoginEnable = useState<bool>(false);
     final isPasskeyEnable = useState<bool>(false);
     final oAuthButtonLabel = useState<String>('OAuth');
-    final logoAnimationController = useAnimationController(duration: const Duration(seconds: 60));
-    unawaited(logoAnimationController.repeat());
-    final serverInfo = ref.watch(serverInfoProvider);
     final warningMessage = useState<String?>(null);
-    final loginFormKey = GlobalKey<FormState>();
+    final isConnecting = useState(true);
+    final connectionError = useState<String?>(null);
     final ValueNotifier<String?> serverEndpoint = useState<String?>(null);
 
     Future<void> checkVersionMismatch() async {
       try {
         final packageInfo = await PackageInfo.fromPlatform();
         final appSemVer = SemVer.fromString(packageInfo.version);
-        final serverSemVer = serverInfo.serverVersion;
-        warningMessage.value = getVersionCompatibilityMessage(serverVersion: serverSemVer, appVersion: appSemVer);
-      } catch (error) {
-        warningMessage.value = 'Error checking version compatibility';
-      }
-    }
-
-    /// Fetch the server login credential and enables oAuth login if necessary
-    /// Returns true if successful, false otherwise
-    Future<void> getServerAuthSettings() async {
-      final sanitizeServerUrl = normalizeServerUrl(serverEndpointController.text);
-      final serverUrl = punycodeEncodeUrl(sanitizeServerUrl);
-
-      // Guard empty URL
-      if (serverUrl.isEmpty) {
-        ImmichToast.show(context: context, msg: context.t.login_form_server_empty, toastType: ToastType.error);
-      }
-
-      try {
-        final endpoint = await ref.read(authProvider.notifier).validateServerUrl(serverUrl);
+        final serverSemVer = ref.read(serverInfoProvider).serverVersion;
         if (!context.mounted) {
           return;
         }
+        warningMessage.value = getVersionCompatibilityMessage(serverVersion: serverSemVer, appVersion: appSemVer);
+      } catch (error) {
+        if (!context.mounted) {
+          return;
+        }
+        warningMessage.value = pholyText(
+          context,
+          'Die Versionsprüfung ist gerade nicht verfügbar.',
+          'Version checking is currently unavailable.',
+        );
+      }
+    }
 
-        // Fetch and load server config and features
+    // PHOLY is a hosted platform. Resolve the fixed endpoint with the original
+    // Immich client so uploads, sync and background workers share its session.
+    Future<void> getServerAuthSettings() async {
+      isConnecting.value = true;
+      connectionError.value = null;
+      try {
+        final endpoint = await ref.read(authProvider.notifier).validateServerUrl(PholyBrand.serverUrl);
+        if (!context.mounted) {
+          return;
+        }
         await ref.read(serverInfoProvider.notifier).getServerInfo();
         if (!context.mounted) {
           return;
         }
-
         final serverInfo = ref.read(serverInfoProvider);
         final passkeyEnabled = await ref.read(PasskeyStore.instance.enabled().future);
         if (!context.mounted) {
           return;
         }
-
-        final features = serverInfo.serverFeatures;
-        final config = serverInfo.serverConfig;
-
-        isOauthEnable.value = features.oauthEnabled;
-        isPasswordLoginEnable.value = features.passwordLogin;
+        isOauthEnable.value = serverInfo.serverFeatures.oauthEnabled;
+        isPasswordLoginEnable.value = serverInfo.serverFeatures.passwordLogin;
         isPasskeyEnable.value = passkeyEnabled;
-        oAuthButtonLabel.value = config.oauthButtonText.isNotEmpty ? config.oauthButtonText : 'OAuth';
-
+        final oauthLabel = serverInfo.serverConfig.oauthButtonText;
+        oAuthButtonLabel.value = oauthLabel.isNotEmpty ? oauthLabel : 'OAuth';
         serverEndpoint.value = endpoint;
-      } on ApiException catch (e) {
+        await checkVersionMismatch();
+      } catch (error, stack) {
+        log.warning('PHOLY connection could not be established', error, stack);
         if (!context.mounted) {
           return;
         }
-
-        ImmichToast.show(
-          context: context,
-          msg: e.message ?? context.t.login_form_api_exception,
-          toastType: ToastType.error,
-          gravity: ToastGravity.TOP,
+        connectionError.value = pholyText(
+          context,
+          'PHOLY ist gerade nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.',
+          'PHOLY is currently unreachable. Check your internet connection and try again.',
         );
-        isOauthEnable.value = false;
-        isPasswordLoginEnable.value = true;
-      } on HandshakeException {
-        if (!context.mounted) {
-          return;
+      } finally {
+        if (context.mounted) {
+          isConnecting.value = false;
         }
-
-        ImmichToast.show(
-          context: context,
-          msg: context.t.login_form_handshake_exception,
-          toastType: ToastType.error,
-          gravity: ToastGravity.TOP,
-        );
-        isOauthEnable.value = false;
-        isPasswordLoginEnable.value = true;
-      } catch (e) {
-        if (!context.mounted) {
-          return;
-        }
-
-        ImmichToast.show(
-          context: context,
-          msg: context.t.login_form_server_error,
-          toastType: ToastType.error,
-          gravity: ToastGravity.TOP,
-        );
-        isOauthEnable.value = false;
-        isPasswordLoginEnable.value = true;
       }
     }
 
     useEffect(() {
-      final serverUrl = getServerUrl();
-      if (serverUrl != null) {
-        serverEndpointController.text = serverUrl;
-      }
+      unawaited(getServerAuthSettings());
       return null;
-    }, []);
-
-    void populateTestLoginInfo() {
-      emailController.text = 'demo@immich.app';
-      passwordController.text = 'demo';
-      serverEndpointController.text = 'https://demo.immich.app';
-    }
-
-    void populateTestLoginInfo1() {
-      emailController.text = 'testuser@email.com';
-      passwordController.text = 'password';
-      serverEndpointController.text = 'http://10.1.15.216:2283/api';
-    }
+    }, const []);
 
     Future<void> handleSyncFlow() async {
       final backgroundManager = ref.read(backgroundSyncProvider);
@@ -217,7 +171,7 @@ class LoginForm extends HookConsumerWidget {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+              shape: const RoundedRectangleBorder(),
               elevation: 5,
               title: Text(
                 context.t.manage_media_access_title,
@@ -260,7 +214,19 @@ class LoginForm extends HookConsumerWidget {
     bool isSyncRemoteDeletionsMode() => Platform.isAndroid && Store.get(StoreKey.manageLocalMediaAndroid, false);
 
     Future<void> finishLogin() async {
-      await ref.read(galleryPermissionNotifier.notifier).requestGalleryPermission();
+      final permission = ref.read(galleryPermissionNotifier.notifier);
+      if (!Store.get(StoreKey.pholyIntroductionSeen, false)) {
+        final allowPhotos = await showPholyIntroduction(context);
+        if (!context.mounted) {
+          return;
+        }
+        await Store.put(StoreKey.pholyIntroductionSeen, true);
+        if (allowPhotos) {
+          await permission.requestGalleryPermission();
+        }
+      } else {
+        await permission.getGalleryPermissionStatus();
+      }
       if (isSyncRemoteDeletionsMode()) {
         await getManageMediaPermission();
       }
@@ -305,7 +271,11 @@ class LoginForm extends HookConsumerWidget {
 
         ImmichToast.show(
           context: context,
-          msg: context.t.login_form_failed_login,
+          msg: pholyText(
+            context,
+            'Anmeldung fehlgeschlagen. Prüfe E-Mail-Adresse und Passwort.',
+            'Sign-in failed. Check your email address and password.',
+          ),
           toastType: ToastType.error,
           gravity: ToastGravity.TOP,
         );
@@ -363,7 +333,11 @@ class LoginForm extends HookConsumerWidget {
 
         ImmichToast.show(
           context: context,
-          msg: context.t.login_form_failed_get_oauth_server_config,
+          msg: pholyText(
+            context,
+            'Die externe Anmeldung ist gerade nicht verfügbar.',
+            'External sign-in is currently unavailable.',
+          ),
           toastType: ToastType.error,
           gravity: ToastGravity.TOP,
         );
@@ -378,7 +352,7 @@ class LoginForm extends HookConsumerWidget {
             return;
           }
 
-          log.info("Finished OAuth login with response: ${loginResponseDto.userEmail}");
+          log.info('Finished OAuth login');
 
           final isSuccess = await ref
               .read(authProvider.notifier)
@@ -442,8 +416,6 @@ class LoginForm extends HookConsumerWidget {
     }
 
     SingleChildRenderObjectWidget buildVersionCompatWarning() {
-      unawaited(checkVersionMismatch());
-
       if (warningMessage.value == null) {
         return const SizedBox.shrink();
       }
@@ -454,7 +426,7 @@ class LoginForm extends HookConsumerWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: context.isDarkTheme ? Colors.amber.shade700 : Colors.amber.shade100,
-            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.zero,
             border: Border.all(color: context.isDarkTheme ? Colors.amber.shade800 : Colors.amber[200]!, width: 2),
           ),
           child: Row(
@@ -474,29 +446,22 @@ class LoginForm extends HookConsumerWidget {
 
     final serverSelectionOrLogin = serverEndpoint.value == null
         ? Padding(
-            padding: const EdgeInsets.only(top: ImmichSpacing.md),
+            padding: const EdgeInsets.symmetric(vertical: 24),
             child: Column(
-              mainAxisSize: MainAxisSize.max,
               children: [
-                ImmichForm(
-                  onSubmit: getServerAuthSettings,
-                  submitText: context.t.next,
-                  submitIcon: Icons.arrow_forward_rounded,
-                  builder: (_, form) => ImmichURLInput(
-                    controller: serverEndpointController,
-                    label: context.t.login_form_endpoint_url,
-                    hintText: context.t.login_form_endpoint_hint,
-                    validator: _validateUrl,
-                    keyboardAction: .next,
-                    onSubmit: (_) => form.submit(),
+                if (isConnecting.value) ...[
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(pholyText(context, 'PHOLY wird verbunden …', 'Connecting to PHOLY …')),
+                ] else ...[
+                  Semantics(liveRegion: true, child: Text(connectionError.value ?? '', textAlign: TextAlign.center)),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: getServerAuthSettings,
+                    icon: const Icon(Icons.refresh),
+                    label: Text(pholyText(context, 'Erneut versuchen', 'Try again')),
                   ),
-                ),
-                ImmichTextButton(
-                  labelText: context.t.settings,
-                  icon: Icons.settings,
-                  variant: ImmichVariant.ghost,
-                  onPressed: () => context.pushRoute(const SettingsRoute()),
-                ),
+                ],
               ],
             ),
           )
@@ -506,14 +471,6 @@ class LoginForm extends HookConsumerWidget {
               mainAxisSize: MainAxisSize.max,
               children: [
                 buildVersionCompatWarning(),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: ImmichSpacing.md),
-                  child: Text(
-                    normalizeServerUrl(serverEndpointController.text),
-                    style: context.textTheme.displaySmall,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
                 if (isPasswordLoginEnable.value)
                   ImmichForm(
                     onSubmit: login,
@@ -534,11 +491,24 @@ class LoginForm extends HookConsumerWidget {
                           controller: passwordController,
                           focusNode: passwordFocusNode,
                           label: context.t.password,
+                          validator: (value) => value == null || value.isEmpty ? context.t.password_required : null,
                           hintText: context.t.login_form_password_hint,
                           keyboardAction: TextInputAction.go,
                           onSubmit: (_) => form.submit(),
                         ),
                       ],
+                    ),
+                  ),
+                if (isPasswordLoginEnable.value)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => PholyPasswordRecoveryPage(initialEmail: emailController.text),
+                        ),
+                      ),
+                      child: Text(pholyText(context, 'Passwort vergessen?', 'Forgot your password?')),
                     ),
                   ),
                 if (isOauthEnable.value)
@@ -567,49 +537,62 @@ class LoginForm extends HookConsumerWidget {
                   ),
                 if (!isOauthEnable.value && !isPasswordLoginEnable.value && !isPasskeyEnable.value)
                   Center(child: Text(context.t.login_disabled)),
-                ImmichTextButton(
-                  labelText: context.t.back,
-                  icon: Icons.arrow_back,
-                  variant: ImmichVariant.ghost,
-                  onPressed: () => serverEndpoint.value = null,
-                ),
               ],
             ),
           );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: (constraints.maxHeight * .06).clamp(24.0, 64.0)),
           child: Center(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 300),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(height: constraints.maxHeight / 5),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  const Center(child: PholyWordmark(width: 232)),
+                  const SizedBox(height: 28),
+                  Text(
+                    pholyText(context, 'Deine Fotos.\nDeine Erinnerungen.', 'Your photos.\nYour memories.'),
+                    textAlign: TextAlign.center,
+                    style: context.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w600, height: 1.15),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    pholyText(context, 'Melde dich mit deinem PHOLY-Konto an.', 'Sign in with your PHOLY account.'),
+                    textAlign: TextAlign.center,
+                    style: context.textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 28),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: context.colorScheme.surfaceContainer,
+                      border: Border.all(color: context.colorScheme.outlineVariant),
+                    ),
+                    child: serverSelectionOrLogin,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      GestureDetector(
-                        onDoubleTap: () => populateTestLoginInfo(),
-                        onLongPress: () => populateTestLoginInfo1(),
-                        child: RotationTransition(turns: logoAnimationController, child: const ImmichLogo()),
+                      Icon(Icons.lock_outline, size: 16, color: context.colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          pholyText(context, 'Kostenlos. Nur mit Einladung.', 'Free. By invitation only.'),
+                          style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceVariant),
+                        ),
                       ),
-                      const Padding(padding: EdgeInsets.only(top: 8.0, bottom: 16), child: ImmichTitleText()),
                     ],
                   ),
-
-                  // Note: This used to have an AnimatedSwitcher, but was removed
-                  // because of https://github.com/flutter/flutter/issues/120874
-                  Form(key: loginFormKey, child: serverSelectionOrLogin),
                 ],
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

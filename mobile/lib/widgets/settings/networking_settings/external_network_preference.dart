@@ -85,7 +85,7 @@ class ExternalNetworkPreference extends HookConsumerWidget {
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          borderRadius: BorderRadius.zero,
           color: context.colorScheme.surfaceContainerLow,
           border: Border.all(color: context.colorScheme.surfaceContainerHighest, width: 1),
         ),

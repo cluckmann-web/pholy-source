@@ -4,6 +4,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart' hide Store;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/constants/pholy_brand.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/models/server_info/server_disk_info.model.dart';
@@ -53,15 +54,9 @@ class ImmichAppBarDialog extends HookConsumerWidget {
               onPressed: () => ContextHelper(context).pop(),
               icon: Icon(Icons.close, size: 20, color: context.colorScheme.onSurfaceVariant),
             ),
-            Align(
+            const Align(
               alignment: Alignment.center,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Image.asset(
-                  context.isDarkTheme ? 'assets/immich-text-dark.png' : 'assets/immich-text-light.png',
-                  height: 16,
-                ),
-              ),
+              child: Padding(padding: EdgeInsets.only(bottom: 4), child: PholyWordmark(width: 120)),
             ),
           ],
         ),
@@ -199,9 +194,7 @@ class ImmichAppBarDialog extends HookConsumerWidget {
             InkWell(
               onTap: () {
                 ContextHelper(context).pop();
-                unawaited(
-                  launchUrl(Uri.parse('https://github.com/immich-app/immich'), mode: LaunchMode.externalApplication),
-                );
+                unawaited(launchUrl(Uri.parse(PholyBrand.sourceUrl), mode: LaunchMode.externalApplication));
               },
               child: Text(context.t.profile_drawer_github, style: context.textTheme.bodySmall),
             ),
@@ -220,7 +213,13 @@ class ImmichAppBarDialog extends HookConsumerWidget {
                     padding: EdgeInsetsGeometry.symmetric(vertical: 10),
                     child: ImmichLogo(size: 40),
                   ),
+                  applicationName: PholyBrand.name,
                   applicationVersion: packageInfo.version,
+                  applicationLegalese: pholyText(
+                    context,
+                    'Auf Basis von Immich. Der vollständige Quellcode und die Lizenzhinweise sind über den PHOLY-Quellcode-Link erreichbar.',
+                    'Built on Immich. Complete source code and license notices are available through the PHOLY source link.',
+                  ),
                 );
               },
               child: Text(context.t.licenses, style: context.textTheme.bodySmall),
@@ -237,7 +236,7 @@ class ImmichAppBarDialog extends HookConsumerWidget {
           dense: true,
           visualDensity: VisualDensity.standard,
           contentPadding: const EdgeInsets.only(left: 20, right: 20),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+          shape: const RoundedRectangleBorder(),
           minLeadingWidth: 20,
           tileColor: theme.primaryColor.withAlpha(80),
           title: Text(
@@ -263,7 +262,7 @@ class ImmichAppBarDialog extends HookConsumerWidget {
           right: horizontalPadding,
           bottom: isHorizontal ? 20 : 100,
         ),
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         child: SizedBox(
           child: SingleChildScrollView(
             child: Column(
@@ -271,10 +270,7 @@ class ImmichAppBarDialog extends HookConsumerWidget {
               children: [
                 Container(padding: const EdgeInsets.symmetric(horizontal: 8), child: buildTopRow()),
                 Container(
-                  decoration: BoxDecoration(
-                    color: context.colorScheme.surface,
-                    borderRadius: const BorderRadius.all(Radius.circular(10)),
-                  ),
+                  decoration: BoxDecoration(color: context.colorScheme.surface, borderRadius: BorderRadius.zero),
                   margin: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
                   child: Column(
                     children: [

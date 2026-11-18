@@ -26,7 +26,7 @@ class EntityCountTile extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.colorScheme.surfaceContainerLow,
-        borderRadius: const BorderRadius.all(Radius.circular(16)),
+        borderRadius: BorderRadius.zero,
         border: Border.all(width: 0.5, color: context.colorScheme.outline.withAlpha(25)),
       ),
       child: Column(

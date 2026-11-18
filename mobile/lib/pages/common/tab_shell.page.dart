@@ -55,6 +55,12 @@ class _TabShellPageState extends ConsumerState<TabShellPage> {
         selectedIcon: Icon(Icons.space_dashboard_rounded, color: context.primaryColor),
         enabled: !isReadonlyModeEnabled,
       ),
+      NavigationDestination(
+        label: 'Community',
+        icon: const Icon(Icons.people_outline),
+        selectedIcon: Icon(Icons.people, color: context.primaryColor),
+        enabled: !isReadonlyModeEnabled,
+      ),
     ];
 
     Widget navigationRail(TabsRouter tabsRouter) {
@@ -77,7 +83,7 @@ class _TabShellPageState extends ConsumerState<TabShellPage> {
     }
 
     return AutoTabsRouter(
-      routes: const [MainTimelineRoute(), SearchRoute(), AlbumsRoute(), LibraryRoute()],
+      routes: const [MainTimelineRoute(), SearchRoute(), AlbumsRoute(), LibraryRoute(), PholyCommunityRoute()],
       duration: const Duration(milliseconds: 600),
       transitionBuilder: (context, child, animation) => FadeTransition(opacity: animation, child: child),
       builder: (context, child) {
