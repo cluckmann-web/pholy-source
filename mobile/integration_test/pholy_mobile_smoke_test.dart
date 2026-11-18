@@ -211,8 +211,12 @@ void main() {
 
     // Empty fields are rejected before any request reaches the server.
     final loginLabel = StaticTranslations.instance.login;
+    final loginButton = find.descendant(
+      of: find.byType(LoginForm),
+      matching: find.widgetWithText(ElevatedButton, loginLabel),
+    );
     _expectLoginValues(tester, email: '', password: '');
-    await _tap(tester, find.text(loginLabel).last);
+    await _tap(tester, loginButton);
     expect(find.text(StaticTranslations.instance.login_form_err_invalid_email), findsOneWidget);
     expect(find.text(StaticTranslations.instance.password_required), findsOneWidget);
     expect(fixture.loginAttempts, 0);
@@ -241,9 +245,13 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), 'wrong-synthetic-password');
     await _hideKeyboard(tester);
     _expectLoginValues(tester, email: PholySmokeFixture.email, password: 'wrong-synthetic-password');
-    await _tap(tester, find.text(loginLabel).last);
+    await _tap(tester, loginButton);
     await _until(tester, () => fixture.loginAttempts == 1, 'wrong-password HTTP response');
-    await tester.pump(const Duration(milliseconds: 700));
+    await _until(
+      tester,
+      () => loginButton.evaluate().length == 1 && tester.widget<ElevatedButton>(loginButton).onPressed != null,
+      'login form completes the rejected request and enables its submit button',
+    );
     expect(providers.read(authProvider).isAuthenticated, isFalse);
     expect(find.byType(LoginForm), findsOneWidget);
     checks.add('Wrong password rejected without an authenticated session');
@@ -251,8 +259,9 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), PholySmokeFixture.password);
     await _hideKeyboard(tester);
     _expectLoginValues(tester, email: PholySmokeFixture.email, password: PholySmokeFixture.password);
-    await _tap(tester, find.text(loginLabel).last);
+    await _tap(tester, loginButton);
     await _until(tester, () => fixture.loginAttempts >= 2, 'second login HTTP request');
+    expect(fixture.loginAttempts, 2, reason: 'Exactly one rejected and one corrected login must be sent');
     expect(
       fixture.successfulLogins,
       1,
@@ -613,17 +622,40 @@ Future<void> _until(
     }
     await tester.pump(const Duration(milliseconds: 100));
   }
-  await tester.pump(const Duration(milliseconds: 100));
 }
 
 Future<void> _tap(WidgetTester tester, Finder finder) async {
   await _until(tester, () => finder.evaluate().isNotEmpty, 'tap target $finder');
-  if (finder.hitTestable().evaluate().isEmpty) {
-    await tester.ensureVisible(finder);
+  final timer = Stopwatch()..start();
+  ({Rect rect, double bottomInset})? previousGeometry;
+  var stableSamples = 0;
+  while (timer.elapsed < const Duration(seconds: 45)) {
+    // Native IME animations can arrive after TextInput.hide completes. Observe
+    // the actual target and viewport after each frame, rather than checking a
+    // finder, pumping another unchecked frame and resolving it again in tap().
+    final target = finder.hitTestable();
+    final matches = target.evaluate().length;
+    if (matches == 1) {
+      final geometry = (rect: tester.getRect(target), bottomInset: tester.view.viewInsets.bottom);
+      stableSamples = geometry == previousGeometry ? stableSamples + 1 : 1;
+      previousGeometry = geometry;
+      if (stableSamples >= 3) {
+        // No further pump or asynchronous finder lookup before this single
+        // gesture. The coordinate belongs to the currently hit-testable target.
+        await tester.tapAt(geometry.rect.center);
+        await tester.pump(const Duration(milliseconds: 200));
+        return;
+      }
+    } else {
+      stableSamples = 0;
+      previousGeometry = null;
+      if (finder.evaluate().length == 1) {
+        await tester.ensureVisible(finder);
+      }
+    }
+    await tester.pump(const Duration(milliseconds: 100));
   }
-  await _until(tester, () => finder.hitTestable().evaluate().isNotEmpty, 'unobscured tap target $finder');
-  await tester.tap(finder.hitTestable());
-  await tester.pump(const Duration(milliseconds: 200));
+  fail('Timed out waiting for a stable, unobscured tap target $finder');
 }
 
 Future<void> _hideKeyboard(WidgetTester tester) async {
