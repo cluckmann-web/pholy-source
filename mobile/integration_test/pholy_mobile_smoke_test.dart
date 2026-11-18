@@ -76,11 +76,13 @@ void main() {
     final fixture = await PholySmokeFixture.start();
     final checks = <String>[];
     final screenshots = <String>[];
+    final screenshotDetails = <Map<String, Object?>>[];
     final external = await getExternalStorageDirectory();
     final evidence = await Directory('${external!.path}/pholy-smoke-evidence').create(recursive: true);
     ProviderContainer? container;
     bool surfaceConverted = false;
     bool completed = false;
+    Size? logicalSurfaceSize;
 
     Future<void> saveEvidence() async {
       final report = <String, dynamic>{
@@ -90,6 +92,7 @@ void main() {
         'fixtureUrl': PholySmokeFixture.baseUrl,
         'checks': checks,
         'screenshots': screenshots,
+        'screenshotDetails': screenshotDetails,
         ...fixture.evidence,
         'notCovered': [
           'A real PHOLY account or production data',
@@ -107,44 +110,76 @@ void main() {
       await pendingReport.rename('${evidence.path}/result.json');
     }
 
-    Future<void> capture(String name) async {
+    Future<void> capture(String name, {Duration timeout = const Duration(seconds: 20)}) async {
+      final nativeSize = tester.view.physicalSize;
+      final logicalSize = logicalSurfaceSize ?? nativeSize / tester.view.devicePixelRatio;
+      final detail = <String, Object?>{
+        'file': '$name.png',
+        'source': 'native Android Flutter surface',
+        'layout': logicalSurfaceSize == null ? 'native device' : 'simulated logical layout fitted to native surface',
+        'logicalWidth': logicalSize.width,
+        'logicalHeight': logicalSize.height,
+        'nativePhysicalWidth': nativeSize.width,
+        'nativePhysicalHeight': nativeSize.height,
+        'nativeDevicePixelRatio': tester.view.devicePixelRatio,
+        'mediaQueryMetrics': 'native device',
+        'captureTimeoutSeconds': timeout.inSeconds,
+        'status': 'started',
+      };
+      screenshotDetails.add(detail);
       // Persist completed checks before requesting a screenshot, so the host
       // can retain progress even if the emulator or graphics backend stops.
       await saveEvidence();
       debugPrint('PHOLY_SMOKE_PROGRESS capture=$name checks=${checks.length} screenshots=${screenshots.length}');
-      await _hideKeyboard(tester);
-      if (!surfaceConverted) {
-        await binding.convertFlutterSurfaceToImage();
-        surfaceConverted = true;
+      try {
+        await _hideKeyboard(tester);
+        if (!surfaceConverted) {
+          await binding.convertFlutterSurfaceToImage().timeout(timeout);
+          surfaceConverted = true;
+        }
+        await tester.pump(const Duration(milliseconds: 250));
+        final bytes = await binding.takeScreenshot(name).timeout(timeout);
+        expect(bytes.length, greaterThanOrEqualTo(24), reason: 'A complete PNG header is required for $name');
+        expect(bytes.take(8), orderedEquals([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        final header = ByteData.sublistView(Uint8List.fromList(bytes));
+        detail['pngWidth'] = header.getUint32(16);
+        detail['pngHeight'] = header.getUint32(20);
+        await File('${evidence.path}/$name.png').writeAsBytes(bytes, flush: true);
+        screenshots.add('$name.png');
+        detail['status'] = 'complete';
+        await saveEvidence();
+      } catch (error) {
+        detail['status'] = 'failed';
+        detail['failure'] = error.toString();
+        await saveEvidence();
+        rethrow;
       }
-      await tester.pump(const Duration(milliseconds: 250));
-      final bytes = await binding.takeScreenshot(name);
-      await File('${evidence.path}/$name.png').writeAsBytes(bytes, flush: true);
-      screenshots.add('$name.png');
-      await saveEvidence();
     }
 
     addTearDown(() async {
       // Failed widget tests retain their tree until binding.postTest. Capture
       // it before closing the fixture/providers and before flutter drive exits
       // the app; the host's later screenshot would only show the launcher.
-      if (!completed && container != null) {
-        try {
-          await capture('99-failure').timeout(const Duration(seconds: 10));
-        } catch (_) {
-          debugPrint('PHOLY_SMOKE_FAILURE_SCREENSHOT_UNAVAILABLE');
+      try {
+        if (!completed && container != null) {
+          try {
+            await capture('99-failure', timeout: const Duration(seconds: 5)).timeout(const Duration(seconds: 10));
+          } catch (_) {
+            debugPrint('PHOLY_SMOKE_FAILURE_SCREENSHOT_UNAVAILABLE');
+          }
         }
+        await saveEvidence();
+        if (container case final current?) {
+          current.read(websocketProvider.notifier).disconnect();
+          await current.read(backgroundSyncProvider).cancel();
+        }
+        await BackgroundWorkerFgService(BackgroundWorkerFgHostApi()).disable();
+        await fixture.close();
+        await workerManagerPatch.dispose();
+      } finally {
+        await binding.setSurfaceSize(null);
+        logicalSurfaceSize = null;
       }
-      await saveEvidence();
-      if (container case final current?) {
-        current.read(websocketProvider.notifier).disconnect();
-        await current.read(backgroundSyncProvider).cancel();
-      }
-      await BackgroundWorkerFgService(BackgroundWorkerFgHostApi()).disable();
-      await fixture.close();
-      await workerManagerPatch.dispose();
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
     });
 
     await EasyLocalization.ensureInitialized();
@@ -542,23 +577,31 @@ void main() {
       () => Theme.of(tester.element(find.byType(CommunityPhotoViewerPage))).brightness == Brightness.dark,
       'dark theme',
     );
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(360, 740);
+    // The live integration binding fits logical layouts into the unchanged
+    // Android surface. Faking physicalSize instead mismatches the native
+    // ImageView and can leave its screenshot frame acquisition waiting forever.
+    logicalSurfaceSize = const Size(360, 740);
+    await binding.setSurfaceSize(logicalSurfaceSize);
     await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getSize(find.byType(CommunityPhotoViewerPage)), logicalSurfaceSize);
     expect(_draftValue(tester), 'Responsive draft');
     expect(tester.takeException(), isNull, reason: 'No overflow at a narrow phone size');
+    await _readyDarkCommentColors(tester);
     await capture('09-community-dark-small');
-    tester.view.physicalSize = const Size(1000, 700);
+    logicalSurfaceSize = const Size(1000, 700);
+    await binding.setSurfaceSize(logicalSurfaceSize);
     await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getSize(find.byType(CommunityPhotoViewerPage)), logicalSurfaceSize);
     expect(_draftValue(tester), 'Responsive draft');
     expect(tester.takeException(), isNull, reason: 'No overflow in the wide split view');
+    await _readyDarkCommentColors(tester);
     await capture('10-community-dark-wide');
-    tester.view.resetPhysicalSize();
-    tester.view.resetDevicePixelRatio();
+    await binding.setSurfaceSize(null);
+    logicalSurfaceSize = null;
     await providers.read(settingsProvider).write(SettingsKey.themeMode, ThemeMode.light);
     await tester.pump(const Duration(milliseconds: 400));
     checks.add(
-      'Dark theme, 360 px phone and 1000 px split view render without overflow; draft survives layout changes',
+      'Dark theme and simulated logical layouts at 360×740 and 1000×700 render without overflow on the native surface; draft survives layout changes',
     );
 
     // Switching photos changes the discussion and clears its previous draft.
@@ -612,6 +655,39 @@ void main() {
 }
 
 Finder _photoTile(String id) => find.byWidgetPredicate((widget) => widget is ThumbnailTile && widget.asset?.id == id);
+
+Future<void> _readyDarkCommentColors(WidgetTester tester) async {
+  final toggle = find.byKey(const ValueKey('pholy-comments-toggle'));
+  final send = find.byKey(const ValueKey('pholy-comment-send'));
+  Color? renderedIconColor(Finder control) {
+    final icon = find.descendant(of: control, matching: find.byType(Icon));
+    final glyph = find.descendant(of: icon, matching: find.byType(RichText));
+    return glyph.evaluate().length == 1 ? tester.widget<RichText>(glyph).text.style?.color : null;
+  }
+
+  ({Color primary, Color onPrimary})? previousColors;
+  var stableFrames = 0;
+  await _until(
+    tester,
+    () {
+      final theme = Theme.of(tester.element(find.byType(CommunityPhotoViewerPage)));
+      final colors = (primary: theme.colorScheme.primary, onPrimary: theme.colorScheme.onPrimary);
+      // Theme.brightness changes before animated control colors necessarily
+      // finish. Check the actual painted icon glyphs, with an enabled draft.
+      final ready =
+          theme.brightness == Brightness.dark &&
+          send.evaluate().length == 1 &&
+          tester.widget<IconButton>(send).onPressed != null &&
+          renderedIconColor(toggle) == colors.primary &&
+          renderedIconColor(send) == colors.onPrimary;
+      stableFrames = ready ? (colors == previousColors ? stableFrames + 1 : 1) : 0;
+      previousColors = ready ? colors : null;
+      return stableFrames >= 2;
+    },
+    'settled rendered dark comment-control colors',
+    timeout: const Duration(seconds: 5),
+  );
+}
 
 Future<void> _scrollDiscussionTo(WidgetTester tester, Finder target) async {
   final list = find.descendant(of: find.byType(PholyPhotoComments), matching: find.byType(ListView));

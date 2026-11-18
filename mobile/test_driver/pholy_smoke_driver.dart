@@ -29,20 +29,29 @@ Future<void> main() async {
       return true;
     },
     responseDataCallback: (Map<String, dynamic>? data) async {
+      final smoke = data?['pholySmoke'];
+      final flowCompleted = smoke is Map<String, dynamic> && smoke['passed'] == true;
       final report = <String, dynamic>{
         ...?data,
         // Do not duplicate binary screenshot arrays in the readable report.
         'screenshots': screenshots,
-        'suiteStatus': 'The flutter drive exit code determines overall success.',
+        'suiteStatus': flowCompleted
+            ? 'PHOLY smoke flow completed; the Flutter suite must also succeed.'
+            : 'PHOLY smoke flow incomplete or missing; the driver fails.',
       };
       final file = File('${directory.path}/result.json');
       await file.writeAsString(const JsonEncoder.withIndent('  ').convert(report), flush: true);
       stdout.writeln('PHOLY_SMOKE_REPORT=${file.absolute.path}');
-      final smoke = data?['pholySmoke'];
       if (smoke is Map<String, dynamic>) {
         final checks = smoke['checks'];
         stdout.writeln('PHOLY_SMOKE_CHECKS=${checks is List ? checks.length : 0}');
         stdout.writeln('PHOLY_SMOKE_FLOW_COMPLETED=${smoke['passed'] == true}');
+      }
+      // integrationDriver calls exit(0) immediately after this callback when
+      // its SDK result says success. Require the app's own terminal check here
+      // as well, so an incomplete/timed-out flow cannot produce a green driver.
+      if (!flowCompleted) {
+        throw StateError('PHOLY smoke flow did not complete successfully; inspect ${file.absolute.path}');
       }
     },
   );
