@@ -33,6 +33,7 @@ class PholySmokeFixture {
   final List<Timer> _pingTimers = [];
   final List<String> unexpectedRequests = [];
   final List<Map<String, Object?>> commentRequests = [];
+  final List<Map<String, Object?>> loginRequestDiagnostics = [];
   final List<String> errors = [];
   final Map<String, List<Map<String, dynamic>>> _discussions = {};
   int loginAttempts = 0;
@@ -199,7 +200,22 @@ class PholySmokeFixture {
     if (path == '/api/auth/login') {
       final body = await _body(request);
       loginAttempts++;
-      if (body['email'] != email || body['password'] != password) {
+      final receivedEmail = body['email'];
+      final receivedPassword = body['password'];
+      final emailMatches = receivedEmail == email;
+      final passwordMatches = receivedPassword == password;
+      // Diagnose input/serialization failures without retaining credentials.
+      loginRequestDiagnostics.add({
+        'attempt': loginAttempts,
+        'keys': body.keys.toList()..sort(),
+        'emailMatches': emailMatches,
+        'passwordMatches': passwordMatches,
+        'emailType': receivedEmail.runtimeType.toString(),
+        'passwordType': receivedPassword.runtimeType.toString(),
+        'emailLength': receivedEmail is String ? receivedEmail.length : null,
+        'passwordLength': receivedPassword is String ? receivedPassword.length : null,
+      });
+      if (!emailMatches || !passwordMatches) {
         return _json(request, {'message': 'Incorrect email or password', 'statusCode': 401}, status: 401);
       }
       successfulLogins++;
@@ -622,6 +638,7 @@ class PholySmokeFixture {
     'fixture': 'loopback-only; all accounts, comments and images synthetic',
     'loginAttempts': loginAttempts,
     'successfulLogins': successfulLogins,
+    'loginRequestDiagnostics': loginRequestDiagnostics,
     'syncRequests': syncRequests,
     'syncAcks': syncAcks,
     'imageRequests': imageRequests,

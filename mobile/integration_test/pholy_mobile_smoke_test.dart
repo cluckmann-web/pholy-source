@@ -119,6 +119,16 @@ void main() {
     }
 
     addTearDown(() async {
+      // Failed widget tests retain their tree until binding.postTest. Capture
+      // it before closing the fixture/providers and before flutter drive exits
+      // the app; the host's later screenshot would only show the launcher.
+      if (!completed && container != null) {
+        try {
+          await capture('99-failure').timeout(const Duration(seconds: 10));
+        } catch (_) {
+          debugPrint('PHOLY_SMOKE_FAILURE_SCREENSHOT_UNAVAILABLE');
+        }
+      }
       await saveEvidence();
       if (container case final current?) {
         current.read(websocketProvider.notifier).disconnect();
@@ -173,10 +183,30 @@ void main() {
     expect(db_store.Store.get(StoreKey.serverEndpoint), '${PholySmokeFixture.baseUrl}/api');
     expect(find.byType(TextFormField), findsNWidgets(2), reason: 'The normal login must not ask for a server URL');
     checks.add('Automatic PHOLY endpoint discovery; only email/password fields');
+    await tester.element(find.byType(LoginForm)).setLocale(const Locale('de'));
+    await _until(
+      tester,
+      () =>
+          Localizations.localeOf(tester.element(find.byType(LoginForm))).languageCode == 'de' &&
+          find.text('Deine Fotos.\nDeine Erinnerungen.').evaluate().isNotEmpty &&
+          find.byType(TextFormField).evaluate().length == 2,
+      'German PHOLY login rendering',
+    );
+    await capture('01-login-de');
+    await tester.element(find.byType(LoginForm)).setLocale(const Locale('en'));
+    await _until(
+      tester,
+      () =>
+          Localizations.localeOf(tester.element(find.byType(LoginForm))).languageCode == 'en' &&
+          find.text('Your photos.\nYour memories.').evaluate().isNotEmpty &&
+          find.byType(TextFormField).evaluate().length == 2,
+      'English PHOLY login restored for interaction checks',
+    );
     await capture('01-login-light');
 
     // Empty fields are rejected before any request reaches the server.
     final loginLabel = StaticTranslations.instance.login;
+    _expectLoginValues(tester, email: '', password: '');
     await _tap(tester, find.text(loginLabel).last);
     expect(find.text(StaticTranslations.instance.login_form_err_invalid_email), findsOneWidget);
     expect(find.text(StaticTranslations.instance.password_required), findsOneWidget);
@@ -205,6 +235,7 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(0), PholySmokeFixture.email);
     await tester.enterText(find.byType(TextFormField).at(1), 'wrong-synthetic-password');
     await _hideKeyboard(tester);
+    _expectLoginValues(tester, email: PholySmokeFixture.email, password: 'wrong-synthetic-password');
     await _tap(tester, find.text(loginLabel).last);
     await _until(tester, () => fixture.loginAttempts == 1, 'wrong-password HTTP response');
     await tester.pump(const Duration(milliseconds: 700));
@@ -214,9 +245,17 @@ void main() {
 
     await tester.enterText(find.byType(TextFormField).at(1), PholySmokeFixture.password);
     await _hideKeyboard(tester);
+    _expectLoginValues(tester, email: PholySmokeFixture.email, password: PholySmokeFixture.password);
     await _tap(tester, find.text(loginLabel).last);
-    await _until(tester, () => find.text('Later').evaluate().isNotEmpty, 'PHOLY permission introduction');
+    await _until(tester, () => fixture.loginAttempts >= 2, 'second login HTTP request');
+    expect(
+      fixture.successfulLogins,
+      1,
+      reason: 'The intended synthetic credentials must be accepted; inspect the value-free login diagnostics',
+    );
+    await _until(tester, () => providers.read(authProvider).isAuthenticated, 'authenticated application session');
     expect(providers.read(authProvider).userId, PholySmokeFixture.userId);
+    await _until(tester, () => find.text('Later').evaluate().isNotEmpty, 'PHOLY permission introduction');
     await capture('03-introduction');
     await _tap(tester, find.text('Later'));
     await _until(tester, () => find.byType(TabShellPage).evaluate().isNotEmpty, 'authenticated library');
@@ -227,6 +266,9 @@ void main() {
 
     // Observe real Drift insertion and an actual visible thumbnail after the
     // standard isolate-based Immich sync, rather than seeding a UI provider.
+    // Join the login flow's local sync first so its remote sync cannot start
+    // later and overlap the fresh sync requested after the upload below.
+    await providers.read(backgroundSyncProvider).syncLocal(full: true).timeout(const Duration(seconds: 90));
     expect(await providers.read(backgroundSyncProvider).syncRemote().timeout(const Duration(seconds: 90)), isTrue);
     final firstAsset = await providers.read(assetServiceProvider).getRemoteAsset(PholySmokeFixture.photoId);
     expect(firstAsset?.id, PholySmokeFixture.photoId);
@@ -535,8 +577,28 @@ Future<void> _tap(WidgetTester tester, Finder finder) async {
 
 Future<void> _hideKeyboard(WidgetTester tester) async {
   FocusManager.instance.primaryFocus?.unfocus();
+  // IntegrationTest keeps the real IME, so TestTextInput.onCleared does not
+  // reset this cached state. Without the reset, enterText on the same field
+  // skips requestKeyboard and sends its value to a closed TextInputConnection.
+  tester.binding.focusedEditable = null;
   await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   await tester.pump(const Duration(milliseconds: 350));
+}
+
+void _expectLoginValues(WidgetTester tester, {required String email, required String password}) {
+  final fields = find.byType(TextFormField);
+  expect(fields, findsNWidgets(2));
+  // Compare booleans so a failing assertion never prints credential contents.
+  expect(
+    tester.widget<TextFormField>(fields.at(0)).controller?.text == email,
+    isTrue,
+    reason: 'The email controller must contain the intended synthetic value before login',
+  );
+  expect(
+    tester.widget<TextFormField>(fields.at(1)).controller?.text == password,
+    isTrue,
+    reason: 'The password controller must contain the intended synthetic value before login',
+  );
 }
 
 Future<void> _back(WidgetTester tester) async {

@@ -162,6 +162,7 @@ org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:MaxDirectMemorySize=5
 org.gradle.parallel=false
 org.gradle.workers.max=2
 org.gradle.daemon=false
+org.gradle.caching=true
 kotlin.compiler.execution.strategy=in-process
 android.jetifier.ignorelist=(armeabi_v7a|arm64_v8a|x86_64)_(debug|profile|release)-1[.]0[.]0-a804b261645ef8c13eb3d5c44a5c2fb0340c5539[.]jar$
 PROPERTIES
@@ -207,6 +208,39 @@ build() {
   grep -q "^package: name='de[.]pholy[.]app[.]debug' " "$evidence_dir/debug-apk-metadata.txt"
   sha256sum "$apk" > "$evidence_dir/debug-apk-sha256.txt"
   (cd android && ./gradlew --stop)
+
+  # This binary starts the in-process fixture test. Keep it separate from the
+  # signed Android test release that connects to the production PHOLY server.
+  local fixture_apk_dir="$RUNNER_TEMP/pholy-native-fixture-apk"
+  mkdir -p "$fixture_apk_dir"
+  cp "$apk" "$fixture_apk_dir/PHOLY-Fixture-Only-Android-x64-debug.apk"
+  cp "$evidence_dir/debug-apk-metadata.txt" "$fixture_apk_dir/"
+  (
+    cd "$fixture_apk_dir"
+    sha256sum PHOLY-Fixture-Only-Android-x64-debug.apk > SHA256SUMS
+  )
+  cat > "$fixture_apk_dir/README.txt" <<'FIXTURE'
+PHOLY: synthetic fixture debug APK for a dedicated Android x86_64 emulator.
+This is not the installable PHOLY Android test release for user accounts.
+Package: de.pholy.app.debug. Fixture endpoint: http://127.0.0.1:17415.
+Entry point: integration_test/pholy_mobile_smoke_test.dart.
+It uses only synthetic accounts/media and executes the integration test.
+Reproduce with the matching source commit and mobile/test_driver/pholy_smoke_driver.dart.
+Use flutter drive --use-application-binary with this APK; do not use a real account.
+FIXTURE
+  printf 'Source commit: %s\nWorkflow run: %s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" >> "$fixture_apk_dir/README.txt"
+
+  # Record actual cache sizes without including SDKs, emulator state or keys.
+  local cache_path
+  {
+    for cache_path in \
+      "$GRADLE_USER_HOME/caches/modules-2" "$GRADLE_USER_HOME/caches/build-cache-1" "$GRADLE_USER_HOME/wrapper/dists" \
+      "$PUB_CACHE/hosted" "$PUB_CACHE/hosted-hashes" "$PUB_CACHE/git" \
+      "$CARGO_HOME/registry/cache" "$CARGO_HOME/registry/index" "$CARGO_HOME/registry/src" \
+      "$repo_dir/native/target" "$repo_dir"/mobile/.dart_tool/hooks_runner/shared/native_core/build/*/target; do
+      if [[ -d "$cache_path" ]]; then du -sh "$cache_path"; fi
+    done
+  } > "$evidence_dir/cache-sizes-after-build.txt"
 }
 
 run() {

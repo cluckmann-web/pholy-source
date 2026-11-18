@@ -1,4 +1,3 @@
-# Runs only on the isolated pholy-mobile-native-test verification branch.
 # No production account, release signing key, deployment, or repository write token.
 name: PHOLY native Android smoke
 
@@ -45,13 +44,92 @@ jobs:
           mkdir -p "$RUNNER_TEMP/pholy-native-evidence"
           bash mobile/scripts/ci-native-smoke.sh setup 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/setup.log"
 
+      - name: Restore dependency and Gradle build caches
+        id: dependency-cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # No toolchain homes, AVD state, Gradle configuration or signing keys.
+          path: |
+            ${{ runner.temp }}/pholy-native-ci/gradle/caches/modules-2
+            ${{ runner.temp }}/pholy-native-ci/gradle/caches/build-cache-1
+            ${{ runner.temp }}/pholy-native-ci/gradle/wrapper/dists
+            ${{ runner.temp }}/pholy-native-ci/pub-cache/hosted
+            ${{ runner.temp }}/pholy-native-ci/pub-cache/hosted-hashes
+            ${{ runner.temp }}/pholy-native-ci/pub-cache/git
+            ${{ runner.temp }}/pholy-native-ci/cargo/registry/cache
+            ${{ runner.temp }}/pholy-native-ci/cargo/registry/index
+            ${{ runner.temp }}/pholy-native-ci/cargo/registry/src
+            !${{ runner.temp }}/pholy-native-ci/gradle/caches/**/*.lock
+          key: pholy-deps-v1-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.PHOLY_FLUTTER_REVISION }}-rust-${{ env.RUSTUP_TOOLCHAIN }}-jdk21.0.2-ndk28.2.13676358-node${{ env.PHOLY_NODE_VERSION }}-${{ hashFiles('mobile/pubspec.lock', 'native/Cargo.lock', 'native/native_core/pubspec.yaml', 'native/crates/native_core_ffi/rust-toolchain.toml', 'mobile/android/**/*.gradle', 'mobile/android/**/*.gradle.kts', 'mobile/android/gradle.properties', 'mobile/android/gradle/wrapper/gradle-wrapper.properties', 'mobile/scripts/build_runner_patch.mjs', 'mobile/scripts/ci-native-smoke.sh') }}
+
+      - name: Restore matching Rust compilation caches
+        id: rust-cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            native/target
+            native/crates/native_core_ffi/include/native_core.h
+            mobile/.dart_tool/hooks_runner/shared/native_core/build/*/target
+          # The host build emits its header outside target/. Cache that header
+          # with the matching Rust sources, never stale generated Dart bindings.
+          key: pholy-rust-v1-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.PHOLY_FLUTTER_REVISION }}-rust-${{ env.RUSTUP_TOOLCHAIN }}-jdk21.0.2-ndk28.2.13676358-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml', 'native/.cargo/config.toml', 'native/crates/**/*.toml', 'native/crates/**/*.rs', 'native/native_core/pubspec.yaml', 'native/native_core/hook/**', 'mobile/pubspec.lock', 'mobile/scripts/ci-native-smoke.sh') }}
+
       - name: Generate the existing mobile client and native bindings
         run: bash mobile/scripts/ci-native-smoke.sh prepare 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/prepare.log"
 
       - name: Build the synthetic debug APK before starting Android
+        id: fixture-build
         run: bash mobile/scripts/ci-native-smoke.sh build 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/build.log"
 
+      # Save before the smoke phase: a later test failure must not discard a
+      # successful build's reusable outputs. Cache failures remain nonfatal.
+      - name: Save dependency and Gradle build caches
+        id: dependency-cache-save
+        if: steps.dependency-cache.outputs.cache-hit != 'true' && steps.dependency-cache.outputs.cache-primary-key != ''
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/pholy-native-ci/gradle/caches/modules-2
+            ${{ runner.temp }}/pholy-native-ci/gradle/caches/build-cache-1
+            ${{ runner.temp }}/pholy-native-ci/gradle/wrapper/dists
+            ${{ runner.temp }}/pholy-native-ci/pub-cache/hosted
+            ${{ runner.temp }}/pholy-native-ci/pub-cache/hosted-hashes
+            ${{ runner.temp }}/pholy-native-ci/pub-cache/git
+            ${{ runner.temp }}/pholy-native-ci/cargo/registry/cache
+            ${{ runner.temp }}/pholy-native-ci/cargo/registry/index
+            ${{ runner.temp }}/pholy-native-ci/cargo/registry/src
+            !${{ runner.temp }}/pholy-native-ci/gradle/caches/**/*.lock
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
+
+      - name: Save matching Rust compilation caches
+        id: rust-cache-save
+        if: steps.rust-cache.outputs.cache-hit != 'true' && steps.rust-cache.outputs.cache-primary-key != ''
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            native/target
+            native/crates/native_core_ffi/include/native_core.h
+            mobile/.dart_tool/hooks_runner/shared/native_core/build/*/target
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+
+      - name: Preserve the fixture-only debug APK
+        id: fixture-apk-artifact
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pholy-fixture-only-debug-apk-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pholy-native-fixture-apk/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          include-hidden-files: false
+
       - name: Run the native smoke flow on a KVM emulator
+        id: native-smoke
         run: bash mobile/scripts/ci-native-smoke.sh run 2>&1 | tee "$RUNNER_TEMP/pholy-native-evidence/run.log"
 
       - name: Preserve logs, screenshots and result JSON
@@ -69,10 +147,16 @@ jobs:
         if: always()
         env:
           PHOLY_JOB_STATUS: ${{ job.status }}
+          PHOLY_SMOKE_OUTCOME: ${{ steps.native-smoke.outcome }}
+          PHOLY_DEPENDENCY_CACHE_OUTCOME: ${{ steps.dependency-cache-save.outcome }}
+          PHOLY_RUST_CACHE_OUTCOME: ${{ steps.rust-cache-save.outcome }}
+          PHOLY_FIXTURE_ARTIFACT_OUTCOME: ${{ steps.fixture-apk-artifact.outcome }}
         run: |
           {
             printf '## PHOLY native Android smoke\n\n'
             printf 'Job status: **%s**.\n\n' "$PHOLY_JOB_STATUS"
+            printf 'Native smoke step: **%s**.\n\n' "$PHOLY_SMOKE_OUTCOME"
+            printf 'Cache saves: dependencies=%s; Rust=%s. Fixture APK artifact=%s. These support steps do not determine application test success.\n\n' "$PHOLY_DEPENDENCY_CACHE_OUTCOME" "$PHOLY_RUST_CACHE_OUTCOME" "$PHOLY_FIXTURE_ARTIFACT_OUTCOME"
             printf 'Scope: a debug fixture APK on an Android 35 x86_64 KVM emulator, using only 127.0.0.1:17415.\n\n'
             printf 'No production account, real user media, release-APK runtime verification, physical-device background test or iOS test is included.\n'
           } >> "$GITHUB_STEP_SUMMARY"
