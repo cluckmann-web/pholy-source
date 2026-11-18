@@ -121,6 +121,8 @@ setup() {
   git clone --depth 1 --branch "$flutter_version" https://github.com/flutter/flutter.git "$tool_dir/flutter"
   [[ "$(git -C "$tool_dir/flutter" rev-parse HEAD)" == "$flutter_revision" ]]
   [[ "$(cat "$tool_dir/flutter/bin/internal/engine.version")" == "$flutter_engine" ]]
+  # The first invocation bootstraps Dart/tool dependencies and can print progress.
+  flutter --version > "$evidence_dir/flutter-bootstrap.log" 2>&1
   flutter --version --machine > "$evidence_dir/flutter-version.json"
   python3 - "$evidence_dir/flutter-version.json" "$flutter_version" "$flutter_revision" "$evidence_dir/flutter-selection.json" <<'PYSDK'
 from pathlib import Path
