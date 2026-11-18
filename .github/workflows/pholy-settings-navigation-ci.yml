@@ -58,5 +58,7 @@ jobs:
             assert line in source, line
           assert '() => context.pushRoute(const SettingsRoute())' not in source
           PY
-          "$RUNNER_TEMP/pholy-flutter/bin/dart" format --output=none --set-exit-if-changed \
-            mobile/lib/utils/dialog_navigation.dart mobile/test/pholy/dialog_navigation_test.dart
+          # Formatting diagnostics in the generated minimal project only.
+          # The monorepo analysis_options imports generated dependencies absent here.
+          "$RUNNER_TEMP/pholy-flutter/bin/dart" format --output=none \
+            "$RUNNER_TEMP/nav-test/lib/dialog_navigation.dart" "$RUNNER_TEMP/nav-test/test/dialog_navigation_test.dart"
