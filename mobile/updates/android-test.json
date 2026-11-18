@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "channel": "android-test",
+  "packageName": "de.pholy.app.test",
+  "version": "3.4.1-pholy-mobile.2",
+  "notes": {
+    "de": "App-Updates mit manueller und abschaltbarer täglicher Prüfung, geprüftem APK-Download und Android-Installationsdialog. Impressum offline auf der Anmeldeseite und in den Einstellungen. Testversion 1 einmal manuell aktualisieren; vorher nicht deinstallieren.",
+    "en": "App updates with manual and optional daily checks, verified APK download and Android installation confirmation. Offline legal notice on the login page and in settings. Update Test 1 manually once; do not uninstall first."
+  },
+  "sourceUrl": "https://github.com/cluckmann-web/pholy-source/tree/b396df9d8464546bf78ddbeedc802874a21979db",
+  "publishedAt": "2026-11-18T14:45:32Z",
+  "builds": [
+    {
+      "abi": "arm64-v8a",
+      "versionCode": 3042202,
+      "minSdk": 26,
+      "bytes": 87140367,
+      "sha256": "35bf6f9f79d41e652cf1dceadf36d659026426f3d4b5d83c2ad63419e36d4d77",
+      "url": "https://github.com/cluckmann-web/pholy-source/releases/download/pholy-mobile-3.4.1-test.2/PHOLY-Android-Test-3.4.1-2-arm64.apk"
+    },
+    {
+      "abi": "x86_64",
+      "versionCode": 3044202,
+      "minSdk": 26,
+      "bytes": 90220393,
+      "sha256": "add6880100f35e62fd70361ccb6a1dc49833657d9fdfe67e4db71a626840e7c2",
+      "url": "https://github.com/cluckmann-web/pholy-source/releases/download/pholy-mobile-3.4.1-test.2/PHOLY-Android-Test-3.4.1-2-x64.apk"
+    }
+  ]
+}
