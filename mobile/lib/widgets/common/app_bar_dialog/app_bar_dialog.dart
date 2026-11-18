@@ -16,6 +16,7 @@ import 'package:immich_mobile/providers/locale_provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/providers/websocket.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
+import 'package:immich_mobile/utils/dialog_navigation.dart';
 import 'package:immich_mobile/utils/bytes_units.dart';
 import 'package:immich_mobile/widgets/common/app_bar_dialog/app_bar_profile_info.dart';
 import 'package:immich_mobile/widgets/common/app_bar_dialog/app_bar_server_info.dart';
@@ -79,11 +80,18 @@ class ImmichAppBarDialog extends HookConsumerWidget {
       );
     }
 
+    // The profile menu is a root DialogRoute. It must be dismissed before
+    // pushing a page or its modal barrier can cover the new page.
+    void navigateFromProfileMenu(PageRouteInfo<dynamic> route) {
+      final router = context.router;
+      dismissDialogAndNavigate(context, () => unawaited(router.push(route)));
+    }
+
     ListTile buildSettingButton() {
       return buildActionButton(
         Icons.settings_outlined,
         context.t.settings,
-        () => context.pushRoute(const SettingsRoute()),
+        () => navigateFromProfileMenu(const SettingsRoute()),
       );
     }
 
@@ -91,7 +99,7 @@ class ImmichAppBarDialog extends HookConsumerWidget {
       return buildActionButton(
         Icons.cleaning_services_outlined,
         context.t.free_up_space,
-        () => context.pushRoute(SettingsSubRoute(section: SettingSection.freeUpSpace)),
+        () => navigateFromProfileMenu(SettingsSubRoute(section: SettingSection.freeUpSpace)),
       );
     }
 
@@ -99,7 +107,7 @@ class ImmichAppBarDialog extends HookConsumerWidget {
       return buildActionButton(
         Icons.assignment_outlined,
         context.t.profile_drawer_app_logs,
-        () => context.pushRoute(const AppLogRoute()),
+        () => navigateFromProfileMenu(const AppLogRoute()),
       );
     }
 
