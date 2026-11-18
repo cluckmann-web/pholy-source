@@ -19,6 +19,7 @@ import 'package:immich_mobile/infrastructure/repositories/settings.repository.da
 import 'package:immich_mobile/main.dart' as app;
 import 'package:immich_mobile/pages/common/tab_shell.page.dart';
 import 'package:immich_mobile/pages/login/pholy_password_recovery.page.dart';
+import 'package:immich_mobile/pholy/comments/photo_comments.widget.dart';
 import 'package:immich_mobile/pholy/community/community.page.dart';
 import 'package:immich_mobile/pholy/community/community_profile.page.dart';
 import 'package:immich_mobile/platform/background_worker_api.g.dart';
@@ -498,6 +499,7 @@ void main() {
 
     // Exercise only the fixture author's permitted actions.
     final ownMenu = find.byKey(const ValueKey('pholy-comment-menu-${PholySmokeFixture.ownCommentId}'));
+    await _scrollDiscussionTo(tester, ownMenu);
     await _tap(tester, ownMenu);
     await _tap(tester, find.text('Edit').last);
     expect(_draftValue(tester), 'My synthetic public comment');
@@ -512,6 +514,7 @@ void main() {
     );
     await _readyComposer(tester);
     await _hideKeyboard(tester);
+    await _scrollDiscussionTo(tester, ownMenu);
     await _tap(tester, ownMenu);
     await _tap(tester, find.text('Delete').last);
     await _until(tester, () => find.byType(AlertDialog).evaluate().isNotEmpty, 'delete confirmation');
@@ -525,6 +528,7 @@ void main() {
       ),
       'allowed comment deletion',
     );
+    await _readyComposer(tester);
     await _until(tester, () => ownMenu.evaluate().isEmpty, 'deleted comment disappears');
     checks.add('Author can edit and delete after confirmation; other-author controls are absent');
     await capture('08-community-comments');
@@ -608,6 +612,23 @@ void main() {
 }
 
 Finder _photoTile(String id) => find.byWidgetPredicate((widget) => widget is ThumbnailTile && widget.asset?.id == id);
+
+Future<void> _scrollDiscussionTo(WidgetTester tester, Finder target) async {
+  final list = find.descendant(of: find.byType(PholyPhotoComments), matching: find.byType(ListView));
+  final scrollable = find.descendant(of: list, matching: find.byType(Scrollable));
+  await _until(tester, () => scrollable.evaluate().length == 1, 'photo discussion list scrollable');
+  // Replies are inserted before later root comments. Their menu may therefore
+  // not have an element yet. Scroll the actual discussion list to build it;
+  // the photo PageView and the composer's separate Scrollables stay untouched.
+  await tester.scrollUntilVisible(
+    target,
+    140,
+    scrollable: scrollable,
+    maxScrolls: 12,
+    duration: const Duration(milliseconds: 100),
+    continuous: true,
+  );
+}
 
 Future<void> _until(
   WidgetTester tester,
