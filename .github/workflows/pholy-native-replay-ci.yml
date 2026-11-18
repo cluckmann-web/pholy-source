@@ -1,0 +1,73 @@
+# Replays one already-built synthetic APK; contains no application build step.
+name: PHOLY native Android fixture replay
+
+on:
+  push:
+    branches:
+      - pholy-mobile-native-replay
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: pholy-native-replay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-replay:
+    if: github.repository == 'cluckmann-web/pholy-source' && github.event_name == 'push' && github.ref == 'refs/heads/pholy-mobile-native-replay'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      FLUTTER_SUPPRESS_ANALYTICS: 'true'
+      DART_SUPPRESS_ANALYTICS: 'true'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the isolated replay branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Retrieve and verify the existing fixture APK
+        env:
+          PHOLY_ARTIFACT_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/pholy-native-replay-evidence"
+          bash mobile/scripts/ci-native-replay.sh fetch 2>&1 | tee "$RUNNER_TEMP/pholy-native-replay-evidence/fetch.log"
+
+      - name: Prepare the SDK-only host driver and KVM emulator
+        run: bash mobile/scripts/ci-native-replay.sh setup 2>&1 | tee "$RUNNER_TEMP/pholy-native-replay-evidence/setup.log"
+
+      - name: Replay the prebuilt fixture with direct VM connection
+        id: replay
+        run: bash mobile/scripts/ci-native-replay.sh run 2>&1 | tee "$RUNNER_TEMP/pholy-native-replay-evidence/run.log"
+
+      - name: Preserve replay diagnostics and screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pholy-native-replay-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pholy-native-replay-evidence/
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 6
+          include-hidden-files: false
+
+      - name: Record the measured scope
+        if: always()
+        env:
+          PHOLY_JOB_STATUS: ${{ job.status }}
+          PHOLY_REPLAY_OUTCOME: ${{ steps.replay.outcome }}
+        run: |
+          {
+            printf '## PHOLY native fixture replay\n\n'
+            printf 'Job: **%s**. Replay step: **%s**.\n\n' "$PHOLY_JOB_STATUS" "$PHOLY_REPLAY_OUTCOME"
+            printf 'Existing fixture APK from run 44248912745, artifact 14403546416, source 6c1a2719178417f7fabeecc7e6a51f36d5b2cd4d.\n\n'
+            printf 'Android 35 x86_64 KVM emulator; Flutter Skia CPU renderer; direct Dart VM connection with DDS disabled. No APK rebuild.\n\n'
+            printf 'Only the synthetic in-app server at 127.0.0.1:17415 is used. Release-APK behavior, production accounts, real media, physical-device background operation and iOS are outside this check.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
