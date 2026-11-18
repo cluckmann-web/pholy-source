@@ -7,6 +7,10 @@ mobile_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 repo_dir=$(CDPATH= cd -- "$mobile_dir/.." && pwd)
 export CI=true FLUTTER_SUPPRESS_ANALYTICS=true DART_SUPPRESS_ANALYTICS=true
 export PHOLY_ANDROID_TEST_BUILD=true
+if [[ -n "${JAVA_HOME:-}" && ! -x "$JAVA_HOME/bin/javac" ]]; then
+  printf 'JAVA_HOME must point to a complete JDK (including bin/javac), not only a Java runtime.\n' >&2
+  exit 1
+fi
 : "${PHOLY_ANDROID_KEYSTORE:?Set an absolute path to the external PHOLY test keystore}"
 : "${ALIAS:?Set the test signing key alias}"
 : "${ANDROID_KEY_PASSWORD:?Set the test key password through the build environment}"

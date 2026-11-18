@@ -1,6 +1,6 @@
 # PHOLY Mobile: Entwicklung, Build und Testinstallation
 
-Diese Anleitung gehört zur Flutter-App **3.4.1-pholy-mobile.1**, Buildnummer
+Diese Anleitung gehört zur Flutter-App **3.4.1-pholy-mobile.1**, Basisbuildnummer
 **3040201**. Sie beschreibt den Quellstand und seine Buildwege. Ausgeführte
 Prüfungen, APK-Prüfsummen, Downloadadressen und verbleibende Laufzeitbefunde
 gehören in den jeweiligen separaten Prüf- und Auslieferungsbericht; diese
@@ -63,6 +63,7 @@ Buildvorbereitung und Tests benötigen keine zusätzlichen Backups.
 | Kotlin / KSP | **2.2.20 / 2.2.20-2.0.3** | Android-Versionskatalog |
 | Kotlin-Serialization-Plugin | **2.1.0**, bestehende Kompatibilitätsvorgabe | Android-Versionskatalog |
 | Android SDK | Compile-/Target-SDK **36**, Minimum **26** | Flutter 3.47.2 und `android/app/build.gradle` |
+| Zusätzliche Android-SDK-Pakete | Plattformen **33, 34, 35 und 36**; Build-Tools **35.0.0 und 36.0.0** | Die vorhandenen nativen Flutter-Plugins verwenden unterschiedliche Compile-SDKs; AGP benötigt außerdem Build-Tools 35.0.0 |
 | Android NDK | **28.2.13676358** | `flutter.ndkVersion` aus Flutter 3.47.2 |
 | Rust | **1.99.1** über rustup | `../native/crates/native_core_ffi/rust-toolchain.toml` |
 | Node.js | **24.22.1** | `../mise.toml`; unter anderem für den Build-Runner-Patch |
@@ -77,6 +78,17 @@ Buildrechner akzeptiert sein. `flutter`, `dart`, `java`, `node`,
 `openapi-generator-cli`, `python3`, `cargo` und `rustup` müssen im `PATH`
 auffindbar sein. SDK-Pfade werden über die übliche lokale Flutter-/Android-
 Konfiguration eingerichtet; rechnerabhängige Pfade gehören nicht ins Git.
+`JAVA_HOME` muss auf ein vollständiges JDK mit `bin/javac` zeigen; eine
+vorhandene Java-Laufzeit allein reicht für den Android-Build nicht aus.
+
+Die benötigten Android-Pakete lassen sich mit dem Android-SDK-Manager installieren:
+
+```bash
+sdkmanager 'platforms;android-33' 'platforms;android-34' \
+  'platforms;android-35' 'platforms;android-36' \
+  'build-tools;35.0.0' 'build-tools;36.0.0' \
+  'platform-tools' 'ndk;28.2.13676358'
+```
 
 Der native Rust-Code wird während des Flutter-Builds aus Quellcode kompiliert.
 Für Android werden hier `aarch64-linux-android` und `x86_64-linux-android`
@@ -187,6 +199,28 @@ build-name=3.4.1-pholy-mobile.1
 build-number=3040201
 ```
 
+`3040201` ist die an Flutter übergebene **Basisbuildnummer**. Beim bestehenden
+`--split-per-abi`-Build erhöht Flutter den Android-`versionCode` standardmäßig
+um den jeweiligen ABI-Zuschlag. Die fertigen APKs werden deshalb auf diese
+abgeleiteten Werte geprüft:
+
+| APK-Architektur | Basisbuildnummer | ABI-Zuschlag | Android-`versionCode` |
+| --- | ---: | ---: | ---: |
+| arm64-v8a | 3040201 | 2000 | **3042201** |
+| x86_64 | 3040201 | 4000 | **3044201** |
+
+Die sichtbare Versionsbezeichnung bleibt bei beiden APKs
+`3.4.1-pholy-mobile.1`. Es wird keine Option zum Unterdrücken dieser
+Flutter-Standardberechnung gesetzt.
+
+Nur bei `PHOLY_ANDROID_TEST_BUILD=true` deaktiviert die Android-Konfiguration
+`minifyEnabled` und `shrinkResources`. Die Testversion wird weiterhin als
+**Release mit Flutter-AOT, nicht debuggable und signiert** gebaut. Java-/Kotlin-
+Code bleibt unminifiziert und Android-Ressourcen werden nicht verkleinert;
+dadurch fällt die APK größer aus. Diese gezielte Testbuild-Ausnahme vermeidet
+den auf dem speicherbegrenzten Arbeitsplatz nicht abgeschlossenen R8-Schritt.
+Die Optimierungsvorgaben regulärer Release-Builds bleiben unverändert.
+
 Für die weiterzugebende Test-APK diesen PHOLY-Buildweg verwenden. Die
 vorhandene allgemeine mise-Aufgabe `build:android` baut ein App-Bundle und
 setzt die PHOLY-Test- und Signierungsprüfungen dieses Skripts nicht um.
@@ -210,6 +244,50 @@ belegt noch keine bestandenen Tests; vor Weitergabe Paketkennung,
 Versionsnummer, Signatur und SHA-256-Prüfsumme der konkreten Datei prüfen
 und im Auslieferungsbericht festhalten. Auf knapp bemessenen Buildrechnern
 Codegenerierung, Tests und Gradle-Build nacheinander ausführen.
+
+### Optional: Debugbuild auf einem speicherbegrenzten Arbeitsplatz
+
+Bei der bisherigen Debug-Buildprüfung wurde der speicherintensive Flutter-/native
+Assemble-Schritt separat vor der Android-Paketierung ausgeführt. Codegenerierung,
+Tests, Flutter/native Assemble und Gradle nacheinander laufen lassen; den Emulator
+erst nach Abschluss der Compiler starten. `JAVA_HOME` muss dabei auf das
+vollständige JDK mit `bin/java` und `bin/javac` zeigen.
+
+Für diese Trennung die von `flutter build apk -v` protokollierten Assemble- und
+Gradle-Aufrufe mit denselben Buildmodus-, Architektur-, Ausgabe- und
+`dart-defines`-Werten verwenden. Der zweite Schritt darf nur auf passende,
+erfolgreich erzeugte Assemble-Ausgaben zurückgreifen. Das reguläre
+PHOLY-Buildskript bleibt unverändert.
+
+Ein beobachteter zusätzlicher Engpass war `JetifyTransform` für das native
+Flutter-Debug-Engine-JAR: Das x86_64-JAR enthält ausschließlich
+`lib/x86_64/libflutter.so` mit rund 390 MB entpackter Größe. Mit dieser **lokalen**
+Regel in `$GRADLE_USER_HOME/gradle.properties` sowie einem lokalen Gradle-Java-Heap
+von 1536 MB und 512 MB DirectBuffer-Limit konnte die vollständige Debug-APK
+erfolgreich gebaut werden:
+
+```properties
+android.jetifier.ignorelist=(armeabi_v7a|arm64_v8a|x86_64)_(debug|profile|release)-1[.]0[.]0-a804b261645ef8c13eb3d5c44a5c2fb0340c5539[.]jar$
+```
+
+Die Regel gilt nur für die nativen ABI-Engine-Artefakte dieses gepinnten
+Flutter-Engine-Stands. `flutter_embedding_*`, Plugins und alle anderen
+Abhängigkeiten bleiben im Jetifier-Verfahren. Jetifier nicht global abschalten;
+Versionspins, Pluginquellen und Repository-Buildkonfiguration dafür nicht ändern.
+
+Dies ist ein **beobachteter Debug-Workaround**. Inzwischen wurden auch die
+ZIP-Zentralverzeichnisse der Release-Engine-JARs dieses Pins geprüft: ARM64 enthält
+nur `lib/arm64-v8a/libflutter.so` (165.164.528 Bytes), x86_64 nur
+`lib/x86_64/libflutter.so` (165.996.904 Bytes). Damit ist die rein native Struktur
+für beide Release-ABIs ebenfalls belegt. Die Release-AOT-Kompilierung wurde für
+beide ABIs erfolgreich abgeschlossen. Ein weiterer R8-Versuch mit G1GC und
+2048 MB Java-Heap endete mit einem ausgefallenen Gradle-Daemon, bevor eine
+vollständige APK vorlag. Für die erneute Testpaketierung wird daher die oben
+beschriebene, ausschließlich für PHOLY-Testbuilds geltende Ausnahme ohne
+Java-/Kotlin-Minifizierung und Resource Shrinking verwendet. Mit dieser
+Konfiguration wurden die Test-Release-APKs beider ABIs vollständig paketiert,
+signiert und statisch geprüft. Der getrennte Nachweis von Installation und
+Laufzeitverhalten steht im [Prüfbericht](PHOLY-MOBILE-TESTREPORT.md).
 
 ## 5. Android installieren und starten
 

@@ -82,6 +82,9 @@ android {
       if (System.getenv("PHOLY_ANDROID_TEST_BUILD") == "true") {
         applicationIdSuffix ".test"
         resValue "string", "app_name", "PHOLY Test"
+        // Keep Java/Kotlin symbols in test APKs; Flutter still uses release/AOT mode.
+        minifyEnabled false
+        shrinkResources false
       }
     }
   }
