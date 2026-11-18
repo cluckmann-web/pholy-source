@@ -116,38 +116,24 @@ setup() {
   [[ "$(node --version)" == "v$node_version" ]]
   npm install --prefix "$tool_dir/openapi-cli" --no-audit --no-fund @openapitools/openapi-generator-cli@2.42.0
 
-  download 'https://storage.googleapis.com/flutter_infra_release/flutter/releases/releases_linux.json' "$tool_dir/downloads/flutter-releases.json"
-  python3 - "$tool_dir/downloads/flutter-releases.json" "$flutter_version" "$flutter_revision" "$tool_dir/downloads/flutter-selection.json" <<'PY'
-from pathlib import Path
-import json, re, sys
-source, version, revision, output = sys.argv[1:]
-data = json.loads(Path(source).read_text())
-base = data['base_url']
-assert base == 'https://storage.googleapis.com/flutter_infra_release/flutter'
-matches = [r for r in data['releases'] if r['version'] == version
-           and r['hash'] == revision and r.get('dart_sdk_arch', 'x64') == 'x64']
-assert matches, 'The exact repository-pinned Flutter SDK is absent from the official Linux archive'
-release = matches[0]
-assert re.fullmatch(r'[A-Za-z0-9/._-]+[.]tar[.]xz', release['archive'])
-assert re.fullmatch(r'[a-fA-F0-9]{64}', release['sha256'])
-Path(output).write_text(json.dumps({'url': base + '/' + release['archive'],
-    'sha256': release['sha256'], 'version': version, 'revision': revision}, indent=2))
-PY
-  local flutter_url flutter_sha
-  flutter_url=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$tool_dir/downloads/flutter-selection.json")
-  flutter_sha=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$tool_dir/downloads/flutter-selection.json")
-  download "$flutter_url" "$tool_dir/downloads/flutter.tar.xz"
-  printf '%s  %s\n' "$flutter_sha" "$tool_dir/downloads/flutter.tar.xz" | sha256sum --check
-  tar -xJf "$tool_dir/downloads/flutter.tar.xz" -C "$tool_dir"
-  rm "$tool_dir/downloads/flutter.tar.xz"
+  # Check out the exact SDK release commit instead of depending on a moving
+  # archive-index URL. Flutter then obtains the engine-pinned Dart artifacts.
+  git clone --depth 1 --branch "$flutter_version" https://github.com/flutter/flutter.git "$tool_dir/flutter"
+  [[ "$(git -C "$tool_dir/flutter" rev-parse HEAD)" == "$flutter_revision" ]]
   [[ "$(cat "$tool_dir/flutter/bin/internal/engine.version")" == "$flutter_engine" ]]
   flutter --version --machine > "$evidence_dir/flutter-version.json"
-  python3 - "$evidence_dir/flutter-version.json" "$flutter_version" "$flutter_revision" <<'PY'
+  python3 - "$evidence_dir/flutter-version.json" "$flutter_version" "$flutter_revision" "$evidence_dir/flutter-selection.json" <<'PYSDK'
+from pathlib import Path
 import json,sys
 data=json.load(open(sys.argv[1]))
 assert data['frameworkVersion'] == sys.argv[2]
 assert data['frameworkRevision'] == sys.argv[3]
-PY
+Path(sys.argv[4]).write_text(json.dumps({
+    'repository': 'https://github.com/flutter/flutter.git',
+    'version': sys.argv[2], 'revision': sys.argv[3],
+    'selection': 'exact release tag plus verified commit and engine hash',
+}, indent=2) + '\n')
+PYSDK
   # The targeted APK build fetches its needed engine artifacts; avoid eagerly
   # precaching every Android ABI/build mode on the runner's limited disk.
 
@@ -186,7 +172,6 @@ PROPERTIES
     sdkmanager --version
     emulator -version
   } > "$evidence_dir/toolchain.txt" 2>&1
-  cp "$tool_dir/downloads/flutter-selection.json" "$evidence_dir/flutter-selection.json"
 }
 
 prepare() {
