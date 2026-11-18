@@ -318,7 +318,12 @@ void main() {
     // The exact application upload path sends a multipart body through the
     // native HTTP client, using a generated image in the test app's own storage.
     final syntheticFile = File('${(await getApplicationSupportDirectory()).path}/pholy-synthetic-upload.png');
-    await syntheticFile.writeAsBytes(fixture.photo, flush: true);
+    expect(
+      fixture.uploadPhotoChecksum,
+      isNot(fixture.photoChecksum),
+      reason: 'A newly created asset must contain different bytes from the existing photo',
+    );
+    await syntheticFile.writeAsBytes(fixture.uploadPhoto, flush: true);
     final uploadedIds = <String>[];
     final uploadErrors = <String>[];
     await providers
@@ -334,14 +339,36 @@ void main() {
     expect(fixture.uploadRequests, 1);
     expect(fixture.uploadIncludedAssetData, isTrue);
     expect(fixture.uploadIncludedDates, isTrue);
-    expect(fixture.uploadedBytes, greaterThan(fixture.photo.length));
-    expect(await providers.read(backgroundSyncProvider).syncRemote().timeout(const Duration(seconds: 90)), isTrue);
-    expect(
-      (await providers.read(assetServiceProvider).getRemoteAsset(PholySmokeFixture.uploadedPhotoId))?.id,
-      PholySmokeFixture.uploadedPhotoId,
+    expect(fixture.uploadMatchesExpectedPhoto, isTrue);
+    expect(fixture.uploadedBytes, greaterThan(fixture.uploadPhoto.length));
+    // Every pass must succeed. Replaying the fixture's complete stream twice
+    // verifies that the new asset does not replace the existing checksum row
+    // or invalidate the album thumbnail; this is not a retry after failure.
+    for (var pass = 0; pass < 2; pass++) {
+      expect(
+        await providers.read(backgroundSyncProvider).syncRemote().timeout(const Duration(seconds: 90)),
+        isTrue,
+        reason: 'Post-upload sync pass ${pass + 1} must complete without a database/stream error',
+      );
+      for (final (id, checksum) in [
+        (PholySmokeFixture.photoId, fixture.photoChecksum),
+        (PholySmokeFixture.uploadedPhotoId, fixture.uploadPhotoChecksum),
+      ]) {
+        final asset = await providers.read(assetServiceProvider).getRemoteAsset(id);
+        expect(asset?.id, id);
+        expect(asset?.checksum, checksum);
+      }
+    }
+    await _until(
+      tester,
+      () => _photoTile(PholySmokeFixture.uploadedPhotoId).hitTestable().evaluate().isNotEmpty,
+      'uploaded image visible in the real gallery after sync',
     );
     await syntheticFile.delete();
-    checks.add('Real multipart image upload, timestamps and file bytes; uploaded asset appears through a new sync');
+    checks.add(
+      'Real multipart upload with distinct PNG bytes and dates; both original and uploaded assets survive repeated sync and the upload appears in the gallery',
+    );
+    await capture('05-uploaded-gallery');
 
     // Open the same asset via an album: it must use the separate album scope,
     // and never reuse the private draft or the original Immich activity API.

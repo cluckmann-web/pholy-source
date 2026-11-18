@@ -39,43 +39,76 @@ apk="$repo_dir/mobile/build/app/outputs/flutter-apk/app-debug.apk"
 emulator_pid=
 logcat_pid=
 evidence_collector_pid=
+drive_pid=
+diagnostic_pid=
+driver_connected=false
 runtime_state=not-started
 
 mark_runtime_state() {
   runtime_state=$1
-  printf '%s\n' "$runtime_state" > "$evidence_dir/runtime-phase.txt"
+  printf '%s\n' "$runtime_state" > "$evidence_dir/runtime-phase.txt.tmp"
+  mv "$evidence_dir/runtime-phase.txt.tmp" "$evidence_dir/runtime-phase.txt"
+}
+
+write_phase_result() {
+  python3 - "$phase" "$1" "$evidence_dir" "$runtime_state" "$driver_connected" "$2" <<'PY'
+from datetime import datetime, timezone
+from pathlib import Path
+import json, os, sys
+phase, code, destination, runtime_state, connected, cleanup = sys.argv[1:]
+result = Path(destination, phase + '-result.json')
+temporary = result.with_suffix('.json.tmp')
+temporary.write_text(json.dumps({
+    'phase': phase, 'runtime_state': runtime_state, 'exit_code': int(code),
+    'recorded_at_utc': datetime.now(timezone.utc).isoformat(),
+    'cleanup_completed': cleanup == 'true',
+    'source_commit': os.environ.get('GITHUB_SHA'),
+    'driver_connection_confirmed': connected == 'true',
+    'scope': 'Synthetic debug APK; loopback fixture; no production account or real media',
+}, indent=2) + '\n')
+temporary.replace(result)
+PY
+}
+
+diagnostic_snapshot() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+  free -m
+  ps -eo pid,ppid,stat,pcpu,pmem,rss,comm --sort=-rss | head -16 || true
+  timeout --kill-after=2s 5 adb devices -l || true
+  timeout --kill-after=2s 5 adb -s emulator-5554 forward --list || true
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell 'getprop sys.boot_completed; getprop init.svc.bootanim; pidof system_server; pidof de.pholy.app.debug; service check activity; service check package' || true
+  timeout --kill-after=2s 5 ss -ltnp || true
 }
 
 finish() {
   local exit_code=$?
   trap - EXIT INT TERM
   set +e
+  # Save the outcome before any cleanup. A stalled ADB operation must not use
+  # up the cancellation grace period before the failure report reaches disk.
+  write_phase_result "$exit_code" false
+  # Drive has a separate process group, including timeout and its Dart children.
+  if [[ -n "$drive_pid" ]]; then kill -TERM -- "-$drive_pid" >/dev/null 2>&1; fi
+  if [[ -n "$diagnostic_pid" ]]; then kill "$diagnostic_pid" >/dev/null 2>&1; fi
   if [[ -n "$evidence_collector_pid" ]]; then
     kill "$evidence_collector_pid" >/dev/null 2>&1
-    timeout 3 tail --pid="$evidence_collector_pid" -f /dev/null >/dev/null 2>&1
+    timeout --kill-after=2s 3 tail --pid="$evidence_collector_pid" -f /dev/null >/dev/null 2>&1
   fi
   if [[ -n "$emulator_pid" ]]; then
-    timeout 8 adb -s emulator-5554 shell 'getprop sys.boot_completed; getprop init.svc.bootanim; pidof system_server; service check package; service check activity' > "$evidence_dir/final-device-state.txt" 2>&1
-    timeout 8 adb -s emulator-5554 logcat -b all -d -t 2000 > "$evidence_dir/final-logcat.txt" 2>&1
-    timeout 8 adb -s emulator-5554 exec-out screencap -p > "$evidence_dir/final-screen.png" 2> "$evidence_dir/screencap-error.txt"
-    timeout 20 adb -s emulator-5554 pull /sdcard/Android/data/de.pholy.app.debug/files/pholy-smoke-evidence "$evidence_dir/device" > "$evidence_dir/pull-evidence.log" 2>&1
-    timeout 5 adb -s emulator-5554 emu kill >/dev/null 2>&1
+    diagnostic_snapshot > "$evidence_dir/final-host-device-state.txt" 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 shell 'getprop sys.boot_completed; getprop init.svc.bootanim; pidof system_server; service check package; service check activity' > "$evidence_dir/final-device-state.txt" 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 logcat -b all -d -t 3000 > "$evidence_dir/final-logcat.txt" 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 exec-out screencap -p > "$evidence_dir/final-screen.png" 2> "$evidence_dir/screencap-error.txt"
+    timeout --kill-after=2s 8 adb -s emulator-5554 pull /sdcard/Android/data/de.pholy.app.debug/files/pholy-smoke-evidence "$evidence_dir/device" > "$evidence_dir/pull-evidence.log" 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 shell am force-stop de.pholy.app.debug >/dev/null 2>&1
+    timeout --kill-after=2s 5 adb -s emulator-5554 emu kill >/dev/null 2>&1
     kill "$emulator_pid" >/dev/null 2>&1
-    timeout 5 tail --pid="$emulator_pid" -f /dev/null >/dev/null 2>&1
+    timeout --kill-after=2s 5 tail --pid="$emulator_pid" -f /dev/null >/dev/null 2>&1
     kill -KILL "$emulator_pid" >/dev/null 2>&1
   fi
   if [[ -n "$logcat_pid" ]]; then kill "$logcat_pid" >/dev/null 2>&1; fi
-  python3 - "$phase" "$exit_code" "$evidence_dir" "$runtime_state" <<'PY'
-from datetime import datetime, timezone
-from pathlib import Path
-import json, sys
-phase, code, destination, runtime_state = sys.argv[1:]
-Path(destination, phase + '-result.json').write_text(json.dumps({
-    'phase': phase, 'runtime_state': runtime_state, 'exit_code': int(code),
-    'completed_at_utc': datetime.now(timezone.utc).isoformat(),
-    'scope': 'Synthetic debug APK; no production account or real media',
-}, indent=2) + '\n')
-PY
+  if [[ -n "$drive_pid" ]]; then kill -KILL -- "-$drive_pid" >/dev/null 2>&1; fi
+  write_phase_result "$exit_code" true
   exit "$exit_code"
 }
 trap finish EXIT
@@ -265,25 +298,25 @@ settings.update({'hw.lcd.width':'720','hw.lcd.height':'1280','hw.lcd.density':'3
     'hw.camera.back':'none','hw.camera.front':'none','showDeviceFrame':'no'})
 p.write_text('\n'.join(f'{key}={value}' for key,value in settings.items())+'\n')
 PY
-  adb start-server
+  timeout --kill-after=2s 10 adb start-server
   emulator -avd pholy_native_ci -port 5554 -no-window -no-audio -no-boot-anim \
     -no-snapshot -no-metrics -gpu swiftshader -feature -Vulkan -accel on \
     -memory 2048 -cores 2 -skin 720x1280 -camera-back none -camera-front none \
     > "$evidence_dir/emulator.log" 2>&1 &
   emulator_pid=$!
   mark_runtime_state boot
-  timeout 180 adb -s emulator-5554 wait-for-device
-  adb -s emulator-5554 logcat -b all -v threadtime > "$evidence_dir/logcat-continuous.txt" 2>&1 &
+  timeout --kill-after=2s 180 adb -s emulator-5554 wait-for-device
+  timeout --kill-after=2s 2000 adb -s emulator-5554 logcat -b all -v threadtime > "$evidence_dir/logcat-continuous.txt" 2>&1 &
   logcat_pid=$!
 
   local deadline=$((SECONDS + 480)) stable=0 previous_pid= current_pid= boot= animation= services= package_path=
   while (( SECONDS < deadline )); do
     kill -0 "$emulator_pid" || { printf 'Emulator exited before readiness.\n' >&2; return 1; }
-    boot=$(timeout 5 adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
-    animation=$(timeout 5 adb -s emulator-5554 shell getprop init.svc.bootanim 2>/dev/null | tr -d '\r' || true)
-    current_pid=$(timeout 5 adb -s emulator-5554 shell pidof system_server 2>/dev/null | tr -d '\r' || true)
-    services=$(timeout 5 adb -s emulator-5554 shell 'service check package; service check activity' 2>/dev/null | tr -d '\r' || true)
-    package_path=$(timeout 5 adb -s emulator-5554 shell cmd package path android 2>/dev/null | tr -d '\r' || true)
+    boot=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+    animation=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell getprop init.svc.bootanim 2>/dev/null | tr -d '\r' || true)
+    current_pid=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell pidof system_server 2>/dev/null | tr -d '\r' || true)
+    services=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell 'service check package; service check activity' 2>/dev/null | tr -d '\r' || true)
+    package_path=$(timeout --kill-after=2s 5 adb -s emulator-5554 shell cmd package path android 2>/dev/null | tr -d '\r' || true)
     if [[ "$boot" == 1 && "$animation" == stopped && -n "$current_pid" && "$current_pid" == "$previous_pid" \
       && "$services" == *'Service package: found'* && "$services" == *'Service activity: found'* && "$package_path" == package:* ]]; then
       stable=$((stable + 1))
@@ -297,19 +330,18 @@ PY
   done
   (( stable >= 3 )) || { printf 'Android framework did not become stable within the readiness deadline.\n' >&2; return 1; }
   mark_runtime_state android-ready
-  [[ "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" == 35 ]]
+  [[ "$(timeout --kill-after=2s 5 adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" == 35 ]]
   # Cosmetic wake/unlock failures must not masquerade as application failures.
-  timeout 5 adb -s emulator-5554 shell input keyevent 224 || true
-  timeout 5 adb -s emulator-5554 shell input keyevent 82 || true
-  adb -s emulator-5554 shell settings put global window_animation_scale 0
-  adb -s emulator-5554 shell settings put global transition_animation_scale 0
-  adb -s emulator-5554 shell settings put global animator_duration_scale 0
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell input keyevent 224 || true
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell input keyevent 82 || true
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell settings put global window_animation_scale 0
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell settings put global transition_animation_scale 0
+  timeout --kill-after=2s 5 adb -s emulator-5554 shell settings put global animator_duration_scale 0
   mark_runtime_state installing-debug-apk
-  timeout 120 adb -s emulator-5554 install -r -t "$apk"
+  timeout --kill-after=2s 120 adb -s emulator-5554 install -r -t "$apk"
   mark_runtime_state debug-apk-installed
-  adb -s emulator-5554 shell pm grant de.pholy.app.debug android.permission.POST_NOTIFICATIONS
+  timeout --kill-after=2s 10 adb -s emulator-5554 shell pm grant de.pholy.app.debug android.permission.POST_NOTIFICATIONS
   cd "$repo_dir/mobile"
-  mark_runtime_state synthetic-app-flow
   # Device-side captures and partial reports must survive even if the emulator
   # process dies before the integration driver can retrieve its final response.
   # Only the synthetic test app's own evidence directory is copied.
@@ -317,21 +349,58 @@ PY
   (
     trap - EXIT INT TERM
     while kill -0 "$emulator_pid" 2>/dev/null; do
-      timeout 8 adb -s emulator-5554 pull \
+      timeout --kill-after=2s 8 adb -s emulator-5554 pull \
         /sdcard/Android/data/de.pholy.app.debug/files/pholy-smoke-evidence \
         "$evidence_dir/checkpoints" >> "$evidence_dir/checkpoint-transfer.log" 2>&1 || true
       sleep 5
     done
   ) &
   evidence_collector_pid=$!
+  (
+    trap - EXIT INT TERM
+    while kill -0 "$emulator_pid" 2>/dev/null; do
+      diagnostic_snapshot >> "$evidence_dir/runtime-host-device-samples.txt" 2>&1
+      sleep 15
+    done
+  ) &
+  diagnostic_pid=$!
   # The preceding emulator process segfaulted while Flutter used Impeller/GLES.
   # Restrict this synthetic flow to Flutter's supported Skia CPU test backend;
   # this runtime choice changes neither the APK nor the product manifest.
-  timeout --signal=TERM --kill-after=30s 1200 flutter drive --no-pub -d emulator-5554 \
-    --no-enable-impeller --enable-software-rendering \
+  # Direct VM service transport is proven by the isolated replay. Retain the
+  # same software renderer and preserve the app until evidence is collected.
+  mark_runtime_state awaiting-vm-driver-connection
+  setsid timeout --signal=TERM --kill-after=30s 1200 \
+    flutter --verbose drive --no-pub -d emulator-5554 --debug --no-dds \
+    --no-enable-impeller --enable-software-rendering --keep-app-running \
     --driver=test_driver/pholy_smoke_driver.dart \
     --target=integration_test/pholy_mobile_smoke_test.dart \
-    --use-application-binary="$apk"
+    --use-application-binary="$apk" > "$evidence_dir/drive-verbose.log" 2>&1 &
+  drive_pid=$!
+  local connection_deadline=$((SECONDS + 240)) drive_status=0
+  while kill -0 "$drive_pid" 2>/dev/null; do
+    if grep -q 'Connected to Flutter application[.]' "$evidence_dir/drive-verbose.log"; then
+      driver_connected=true
+      mark_runtime_state synthetic-app-flow
+      break
+    fi
+    kill -0 "$emulator_pid" || { mark_runtime_state emulator-exited-during-connection; return 1; }
+    if (( SECONDS >= connection_deadline )); then
+      mark_runtime_state vm-driver-connection-timeout
+      printf 'The Flutter driver did not finish its VM/extension connection within 240 seconds.\n' >&2
+      tail -100 "$evidence_dir/drive-verbose.log"
+      return 1
+    fi
+    sleep 3
+  done
+  wait "$drive_pid" || drive_status=$?
+  drive_pid=
+  # A quick completed run can leave the wait loop before the final log poll.
+  if grep -q 'Connected to Flutter application[.]' "$evidence_dir/drive-verbose.log"; then driver_connected=true; fi
+  printf 'Flutter drive exit code: %s; driver connected: %s\n' "$drive_status" "$driver_connected"
+  tail -100 "$evidence_dir/drive-verbose.log"
+  [[ "$drive_status" == 0 ]] || return "$drive_status"
+  [[ "$driver_connected" == true ]] || { mark_runtime_state vm-driver-connection-unconfirmed; return 1; }
   python3 - "$PHOLY_SMOKE_OUTPUT_DIR/result.json" <<'PY'
 import json,sys
 report=json.load(open(sys.argv[1]))
@@ -339,6 +408,8 @@ smoke=report.get('pholySmoke',{})
 assert smoke.get('passed') is True, 'Driver did not report completion of the synthetic flow'
 assert smoke.get('fixtureUrl') == 'http://127.0.0.1:17415'
 assert smoke.get('applicationId') == 'de.pholy.app.debug'
+assert isinstance(smoke.get('checks'), list) and len(smoke['checks']) > 0
+assert isinstance(report.get('screenshots'), list) and len(report['screenshots']) > 0
 print('Native synthetic flow completed using Flutter software rendering; production renderer and physical-device behavior remain outside this test.')
 PY
   mark_runtime_state synthetic-flow-completed

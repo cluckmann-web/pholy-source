@@ -9,7 +9,7 @@ import 'package:crypto/crypto.dart';
 /// An in-memory, loopback-only PHOLY/Immich contract fixture. No external service,
 /// real account, SMTP connection, database or user media is accessed by this file.
 class PholySmokeFixture {
-  PholySmokeFixture._(this._server, this.photo);
+  PholySmokeFixture._(this._server, this.photo, this.uploadPhoto);
 
   static const port = 17415;
   static const baseUrl = 'http://127.0.0.1:$port';
@@ -29,6 +29,9 @@ class PholySmokeFixture {
 
   final HttpServer _server;
   final Uint8List photo;
+  final Uint8List uploadPhoto;
+  String get photoChecksum => base64Encode(sha1.convert(photo).bytes);
+  String get uploadPhotoChecksum => base64Encode(sha1.convert(uploadPhoto).bytes);
   final List<WebSocket> _sockets = [];
   final List<Timer> _pingTimers = [];
   final List<String> unexpectedRequests = [];
@@ -38,6 +41,7 @@ class PholySmokeFixture {
   final Map<String, List<Map<String, dynamic>>> _discussions = {};
   int loginAttempts = 0;
   int successfulLogins = 0;
+  int tokenValidationRequests = 0;
   int syncRequests = 0;
   int syncAcks = 0;
   int imageRequests = 0;
@@ -46,6 +50,8 @@ class PholySmokeFixture {
   int uploadedBytes = 0;
   bool uploadIncludedAssetData = false;
   bool uploadIncludedDates = false;
+  bool uploadMatchesExpectedPhoto = false;
+  bool _uploadAccepted = false;
   int passwordResetRequests = 0;
   int invalidContextRequests = 0;
   int deniedMutationRequests = 0;
@@ -54,8 +60,12 @@ class PholySmokeFixture {
 
   static Future<PholySmokeFixture> start() async {
     final photo = await _makePhoto();
+    // A newly uploaded asset needs different real bytes. Immich deduplicates
+    // normal assets by owner/checksum; inventing a new ID for photo's bytes
+    // replaces that row locally and breaks the album's thumbnail reference.
+    final uploadPhoto = await _makePhoto(skyColor: const ui.Color(0xFFE4BD9E));
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
-    final fixture = PholySmokeFixture._(server, photo);
+    final fixture = PholySmokeFixture._(server, photo, uploadPhoto);
     server.listen(
       (request) => unawaited(
         fixture._route(request).catchError((Object error, StackTrace stack) async {
@@ -72,11 +82,11 @@ class PholySmokeFixture {
     return fixture;
   }
 
-  static Future<Uint8List> _makePhoto() async {
+  static Future<Uint8List> _makePhoto({ui.Color skyColor = const ui.Color(0xFFB9D7CE)}) async {
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder);
     canvas.drawRect(const ui.Rect.fromLTWH(0, 0, 640, 480), ui.Paint()..color = const ui.Color(0xFFECE9DA));
-    canvas.drawRect(const ui.Rect.fromLTWH(0, 0, 640, 275), ui.Paint()..color = const ui.Color(0xFFB9D7CE));
+    canvas.drawRect(const ui.Rect.fromLTWH(0, 0, 640, 275), ui.Paint()..color = skyColor);
     canvas.drawCircle(const ui.Offset(455, 120), 54, ui.Paint()..color = const ui.Color(0xFFF7F3E7));
     final hills = ui.Path()
       ..moveTo(0, 360)
@@ -120,7 +130,7 @@ class PholySmokeFixture {
     await request.response.close();
   }
 
-  Future<void> _image(HttpRequest request, {bool public = false}) async {
+  Future<void> _image(HttpRequest request, {bool public = false, Uint8List? bytes}) async {
     if (public) {
       publicImageRequests++;
     } else {
@@ -130,7 +140,7 @@ class PholySmokeFixture {
       ..statusCode = 200
       ..headers.contentType = ContentType('image', 'png')
       ..headers.set('Cache-Control', 'no-store')
-      ..add(photo);
+      ..add(bytes ?? photo);
     await request.response.close();
   }
 
@@ -247,6 +257,13 @@ class PholySmokeFixture {
     if (!_authenticated(request)) {
       return _json(request, {'message': 'Synthetic fixture session required', 'statusCode': 401}, status: 401);
     }
+    // The upstream image/session path validates the existing synthetic token.
+    // This route remains behind the same authentication guard as other APIs.
+    if (path == '/api/auth/validateToken' && method == 'POST') {
+      await request.drain<void>();
+      tokenValidationRequests++;
+      return _json(request, {'authStatus': true});
+    }
     if (path.contains('/socket.io') && WebSocketTransformer.isUpgradeRequest(request)) {
       final socket = await WebSocketTransformer.upgrade(request);
       _sockets.add(socket);
@@ -313,6 +330,13 @@ class PholySmokeFixture {
       uploadIncludedAssetData =
           multipart.contains('name="assetData"') && multipart.contains('pholy-synthetic-upload.png');
       uploadIncludedDates = multipart.contains('name="fileCreatedAt"') && multipart.contains('name="fileModifiedAt"');
+      // latin1 preserves each byte of the multipart payload. Require the whole
+      // generated PNG, not just a filename or a body larger than the image.
+      uploadMatchesExpectedPhoto = multipart.contains(latin1.decode(uploadPhoto));
+      if (!uploadIncludedAssetData || !uploadIncludedDates || !uploadMatchesExpectedPhoto) {
+        return _json(request, {'message': 'Invalid synthetic upload bytes or fields'}, status: 400);
+      }
+      _uploadAccepted = true;
       return _json(request, {'id': uploadedPhotoId, 'status': 'created'}, status: 201);
     }
     final asset = RegExp(r'^/api/assets/([^/]+)(?:/(.*))?$').firstMatch(path);
@@ -320,7 +344,7 @@ class PholySmokeFixture {
       final id = asset.group(1)!;
       final suffix = asset.group(2);
       if (suffix == 'thumbnail' || suffix == 'original' || suffix == 'preview') {
-        return _image(request);
+        return _image(request, bytes: id == uploadedPhotoId ? uploadPhoto : photo);
       }
       if (suffix == 'metadata') {
         return _json(request, []);
@@ -387,7 +411,7 @@ class PholySmokeFixture {
   Map<String, dynamic> _asset(String id) => {
     'id': id,
     'ownerId': userId,
-    'checksum': base64Encode(sha1.convert(photo).bytes),
+    'checksum': id == uploadedPhotoId ? uploadPhotoChecksum : photoChecksum,
     'createdAt': timestamp,
     'deletedAt': null,
     'duration': null,
@@ -441,7 +465,7 @@ class PholySmokeFixture {
       ('AuthUserV2', auth),
       ('UserV1', auth),
       ('AssetV2', _asset(photoId)),
-      if (uploadRequests > 0) ('AssetV2', _asset(uploadedPhotoId)),
+      if (_uploadAccepted) ('AssetV2', _asset(uploadedPhotoId)),
       (
         'AlbumV2',
         {
@@ -638,6 +662,7 @@ class PholySmokeFixture {
     'fixture': 'loopback-only; all accounts, comments and images synthetic',
     'loginAttempts': loginAttempts,
     'successfulLogins': successfulLogins,
+    'tokenValidationRequests': tokenValidationRequests,
     'loginRequestDiagnostics': loginRequestDiagnostics,
     'syncRequests': syncRequests,
     'syncAcks': syncAcks,
@@ -647,6 +672,9 @@ class PholySmokeFixture {
     'uploadedBytes': uploadedBytes,
     'uploadIncludedAssetData': uploadIncludedAssetData,
     'uploadIncludedDates': uploadIncludedDates,
+    'uploadMatchesExpectedPhoto': uploadMatchesExpectedPhoto,
+    'photoChecksum': photoChecksum,
+    'uploadPhotoChecksum': uploadPhotoChecksum,
     'passwordResetRequests': passwordResetRequests,
     'invalidContextRequests': invalidContextRequests,
     'deniedMutationRequests': deniedMutationRequests,
