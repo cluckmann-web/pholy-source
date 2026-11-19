@@ -86,8 +86,8 @@ android {
 
       // Test releases install independently from the future store build.
       if (System.getenv("PHOLY_ANDROID_TEST_BUILD") == "true") {
-        applicationIdSuffix ".test"
-        resValue "string", "app_name", "PHOLY Test"
+        applicationIdSuffix(System.getenv("PHOLY_ANDROID_PARALLEL_TEST3") == "true" ? ".test3" : ".test")
+        resValue "string", "app_name", System.getenv("PHOLY_ANDROID_PARALLEL_TEST3") == "true" ? "PHOLY Test 3" : "PHOLY Test"
         buildConfigField "boolean", "PHOLY_SIDELOAD_UPDATES", "true"
         // Keep Java/Kotlin symbols in test APKs; Flutter still uses release/AOT mode.
         minifyEnabled false

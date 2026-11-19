@@ -9,8 +9,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:path/path.dart' as path;
 
-const _testPackage = 'de.pholy.app.test';
-const _testChannel = 'android-test';
+const _testPackage = String.fromEnvironment('PHOLY_UPDATE_PACKAGE', defaultValue: 'de.pholy.app.test');
+const _testChannel = String.fromEnvironment('PHOLY_UPDATE_CHANNEL', defaultValue: 'android-test');
 const _maxApkBytes = 250 * 1024 * 1024;
 const _maxFeedBytes = 64 * 1024;
 const _supportedAbis = {'arm64-v8a', 'armeabi-v7a', 'x86_64'};
@@ -306,7 +306,7 @@ class PholyUpdateService {
 
   static final feedUri = Uri.https(
     'raw.githubusercontent.com',
-    '/cluckmann-web/pholy-source/main/mobile/updates/android-test.json',
+    const String.fromEnvironment('PHOLY_UPDATE_FEED_PATH', defaultValue: '/cluckmann-web/pholy-source/main/mobile/updates/android-test.json'),
   );
 
   final http.Client Function()? clientFactory;
