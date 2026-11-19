@@ -1,0 +1,35 @@
+name: PHOLY Android build tools export (no secrets)
+
+on:
+  push:
+    branches:
+      - build/pholy-mobile-3.4.1-test.3-parallel
+    paths:
+      - .github/workflows/pholy-build-tools-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  tools:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Export Android APK signing verifier from runner SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p export
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          jar="$(find "$sdk/build-tools" -path '*/lib/apksigner.jar' -type f | sort -V | tail -n 1)"
+          if [ -z "$jar" ]; then
+            echo "Missing apksigner.jar in build-tools" >&2
+            exit 1
+          fi
+          cp "$jar" export/apksigner.jar
+          sha256sum export/apksigner.jar
+      - name: Upload verification tool only (no keys or APKs)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pholy-android-apksigner-tool
+          path: export/apksigner.jar
+          retention-days: 7
